@@ -42,9 +42,4 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, chunkIndex })
 }
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}
-
+export const runtime = 'edge';

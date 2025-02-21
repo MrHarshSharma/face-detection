@@ -19,7 +19,7 @@ export default function VideoUploader() {
   const [referenceImage, setReferenceImage] = useState<File | null>(null)
   const [snapshots, setSnapshots] = useState<string[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
-  const [similarityThreshold, setSimilarityThreshold] = useState(0.6)
+  const [similarityThreshold, setSimilarityThreshold] = useState(0.65)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
@@ -119,7 +119,7 @@ export default function VideoUploader() {
                 <Film className="w-8 h-8 mb-2 text-gray-400" />
                 {video ? <p className="text-sm text-gray-600">Uploaded video: {video.name}</p> : <p className="text-sm text-gray-600">Click to upload video</p>}
               </div>
-              <Input id="video-upload" type="file" accept="video/*" className="hidden" onChange={handleVideoChange} />
+              <Input id="video-upload" type="file" accept=".mp4, .mkv, .avi, .mov, .wmv, .flv, .mpg, .mpeg" className="hidden" onChange={handleVideoChange} />
             </label>
           </div>
           {/* {video && <p className="text-sm text-gray-600">Selected video: {video.name}</p>} */}

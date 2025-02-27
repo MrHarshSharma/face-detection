@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { get, put } from "@vercel/blob"
+import { put } from "@vercel/blob"
 import { exec } from "child_process"
 import { promisify } from "util"
 import { writeFile, unlink, readFile } from "fs/promises"

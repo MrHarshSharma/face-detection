@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
-import { Film, ImageIcon } from "lucide-react"
+import { Film, ImageIcon, Send } from "lucide-react"
 import SnapshotGallery from "./SnapshotGallery"
 import DownloadButton from "./DownloadButton"
 import * as faceapi from "face-api.js"
@@ -152,6 +152,10 @@ export default function VideoUploader() {
   const imageRef = useRef<HTMLImageElement>(null)
   const [isEmailPopupOpen, setEmailPopupOpen] = useState(false)
 
+  // Add refs for the input elements
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     loadFaceApiModels()
   }, [])
@@ -234,22 +238,44 @@ export default function VideoUploader() {
     return detection?.descriptor
   }
 
+  const handleReset = () => {
+    // Reset all states to initial values
+    setVideo(null)
+    setReferenceImage(null)
+    setSnapshots([])
+    setSimilarityThreshold(0.6)
+    setIsProcessing(false)
+    setEmailPopupOpen(false)
+
+    // Reset the input values
+    if (videoInputRef.current) videoInputRef.current.value = '';
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  }
+
   return (
     <>
       <ToastContainer />
-      <Card className="w-full">
+      <Card className="w-full shadow-md">
         <CardContent className="p-6">
           <div className="space-y-4">
             <div className={`flex items-center justify-center w-full videocontainer ${video ? 'bg-blue-100' : 'bg-gray-50'}`}>
               <label
                 htmlFor="video-upload"
-                className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer"
+                className={`flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg ${snapshots.length > 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               >
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6 ">
                   <Film className="w-8 h-8 mb-2 text-gray-400" />
                   {video ? <p className="text-sm text-gray-600">Uploaded video: {video.name}</p> : <p className="text-sm text-gray-600">Click to upload video</p>}
                 </div>
-                <Input id="video-upload" type="file" accept=".mp4, .mkv, .avi, .mov, .wmv, .flv, .mpg, .mpeg" className="hidden" onChange={handleVideoChange} />
+                <Input 
+                  ref={videoInputRef}
+                  id="video-upload" 
+                  type="file" 
+                  accept=".mp4, .mkv, .avi, .mov, .wmv, .flv, .mpg, .mpeg" 
+                  className="hidden" 
+                  onChange={handleVideoChange}
+                  disabled={snapshots.length > 0}
+                />
               </label>
             </div>
             {/* {video && <p className="text-sm text-gray-600">Selected video: {video.name}</p>} */}
@@ -258,7 +284,7 @@ export default function VideoUploader() {
 
               <label
                 htmlFor="image-upload"
-                className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer"
+                className={`flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg ${snapshots.length > 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                 >
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   {referenceImage ? (
@@ -273,7 +299,15 @@ export default function VideoUploader() {
                     </>
                   )}
                 </div>
-                <Input id="image-upload" type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                <Input 
+                  ref={imageInputRef}
+                  id="image-upload" 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  onChange={handleImageChange}
+                  disabled={snapshots.length > 0}
+                />
               </label>
             </div>
 
@@ -290,25 +324,51 @@ export default function VideoUploader() {
                 onValueChange={(value) => setSimilarityThreshold(value[0])}
               />
             </div>
-
-            <Button onClick={generateSnapshots} disabled={!video || !referenceImage || isProcessing} className="w-full">
+                  <div className="flex justify-center">
+            <Button 
+              onClick={generateSnapshots} 
+              disabled={!video || !referenceImage || isProcessing || snapshots.length > 0} 
+              className={`w-[70%] ${snapshots.length > 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+                    
               {isProcessing ? "Processing..." : "Start Face Detection"}
             </Button>
+                  </div>
           </div>
           <video ref={videoRef} className="hidden" />
           <canvas ref={canvasRef} className="hidden" />
           <img ref={imageRef} className="hidden" />
-          {snapshots.length > 0 && (
-            <>
-              <SnapshotGallery snapshots={snapshots} />
-              <DownloadButton snapshots={snapshots} videoName={video?.name || "video"} />
-              <Button onClick={() => setEmailPopupOpen(true)} className="w-full mt-2">
-                Send on Email
-              </Button>
-            </>
-          )}
+          
         </CardContent>
       </Card>
+
+        {snapshots.length > 0 && (
+      <Card className="w-full mt-5 shadow-md">
+      <CardContent className="p-6">
+            <>
+              <SnapshotGallery 
+                snapshots={snapshots} 
+                onReset={handleReset}
+              />
+              <div className="flex flex-col sm:flex-row gap-4 mt-4">
+                <DownloadButton 
+                  snapshots={snapshots} 
+                  videoName={video?.name || "video"} 
+                  className="flex-1 w-full"
+                />
+                <Button 
+                  onClick={() => setEmailPopupOpen(true)} 
+                  className="border-2 border-black flex-1 md:mt-4 w-full sm:mt-2"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  <span className="sm:inline">Send on Email</span>
+                  {/* <span className="inline sm:hidden">Email</span> */}
+                </Button>
+              </div>
+            </>
+        </CardContent>
+      </Card>
+          )}
       <EmailPopup 
         isOpen={isEmailPopupOpen} 
         onClose={() => setEmailPopupOpen(false)} 

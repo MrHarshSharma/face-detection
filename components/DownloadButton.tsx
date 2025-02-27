@@ -8,9 +8,10 @@ import JSZip from "jszip"
 interface DownloadButtonProps {
   snapshots: string[]
   videoName: string
+  className?: string
 }
 
-export default function DownloadButton({ snapshots, videoName }: DownloadButtonProps) {
+export default function DownloadButton({ snapshots, videoName, className }: DownloadButtonProps) {
   const [isDownloading, setIsDownloading] = useState(false)
 
   const downloadImages = async () => {
@@ -38,9 +39,14 @@ export default function DownloadButton({ snapshots, videoName }: DownloadButtonP
   }
 
   return (
-    <Button onClick={downloadImages} className="mt-4" disabled={isDownloading}>
+    <Button 
+      onClick={downloadImages} 
+      className={`mt-4 ${className} border-2 text-black border-black bg-white hover:bg-black hover:text-white w-full`} 
+      disabled={isDownloading}
+    >
       <Download className="w-4 h-4 mr-2" />
-      {isDownloading ? "Preparing Download..." : "Download Face Snapshots"}
+      <span className="sm:inline">Download Images</span>
+      {/* <span className="inline sm:hidden">Download</span> */}
     </Button>
   )
 }

@@ -3,13 +3,14 @@
 import { useState } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react"
 
 interface SnapshotGalleryProps {
   snapshots: string[]
+  onReset?: () => void
 }
 
-export default function SnapshotGallery({ snapshots }: SnapshotGalleryProps) {
+export default function SnapshotGallery({ snapshots, onReset }: SnapshotGalleryProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const snapshotsPerPage = 15
   const totalPages = Math.ceil(snapshots.length / snapshotsPerPage)
@@ -19,8 +20,18 @@ export default function SnapshotGallery({ snapshots }: SnapshotGalleryProps) {
   const currentSnapshots = snapshots.slice(startIndex, endIndex)
 
   return (
-    <div className="mt-8">
-      <h2 className="text-2xl font-semibold mb-4 text-gray-800">Yipee, {snapshots.length} images found!</h2>
+    <div className="space-y-4">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold">Detected Faces</h3>
+        <Button
+          onClick={onReset}
+          variant="outline"
+          className="scale-75 border-2 border-red-500 text-red-500 hover:bg-yellow-400 hover:text-black hover:border-yellow-400 "
+        >
+          <RotateCcw className="w-4 h-4 mr-2 " />
+          Reset
+        </Button>
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {currentSnapshots.map((snapshot, index) => (
           <div

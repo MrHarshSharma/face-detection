@@ -6,7 +6,7 @@ import { Download } from "lucide-react"
 import JSZip from "jszip"
 
 interface DownloadButtonProps {
-  snapshots: string[]
+  snapshots: { url: string; timestamp: string }[]
   videoName: string
   className?: string
 }
@@ -19,7 +19,7 @@ export default function DownloadButton({ snapshots, videoName, className }: Down
     const zip = new JSZip()
 
     snapshots.forEach((snapshot, index) => {
-      const imgData = snapshot.split("base64,")[1]
+      const imgData = snapshot.url.split("base64,")[1]
       zip.file(`face-snapshot-${index + 1}.jpg`, imgData, { base64: true })
     })
 

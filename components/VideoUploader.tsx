@@ -76,7 +76,7 @@ const EmailPopup = ({ isOpen, onClose, videoName, imageName, snapshots }: EmailP
 
       // Open Gmail with drive link
       const subject = "Your Images";
-      const body = `Please find your Images here: ${fileUrl}\n\nRegards,\nTeam FacialID`;
+      const body = `This is an automated email. Do not reply to this email.\n\nPlease find your Images here: ${fileUrl}\n\nImages will be automatically vanished after 7 days.\n\nRegards,\nTeam FacialID`;
       const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}&html=true`;
       
       const width = 800;
@@ -141,35 +141,57 @@ const EmailPopup = ({ isOpen, onClose, videoName, imageName, snapshots }: EmailP
   );
 };
 
+// Add interface for snapshot info
+interface SnapshotInfo {
+  url: string;
+  timestamp: string;
+}
+
 export default function VideoUploader() {
   const [video, setVideo] = useState<File | null>(null)
   const [referenceImage, setReferenceImage] = useState<File | null>(null)
-  const [snapshots, setSnapshots] = useState<string[]>([])
+  const [snapshots, setSnapshots] = useState<SnapshotInfo[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
-  const [similarityThreshold, setSimilarityThreshold] = useState(0.65)
+  const [similarityThreshold, setSimilarityThreshold] = useState(0.50)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const [isEmailPopupOpen, setEmailPopupOpen] = useState(false)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0);
 
   // Add refs for the input elements
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    loadFaceApiModels()
-  }, [])
+  // Add state for model loading
+  const [isModelLoading, setIsModelLoading] = useState(true);
 
-  const loadFaceApiModels = async () => {
-    await faceapi.nets.ssdMobilenetv1.loadFromUri("/models")
-    await faceapi.nets.faceLandmark68Net.loadFromUri("/models")
-    await faceapi.nets.faceRecognitionNet.loadFromUri("/models")
-  }
+  // Update useEffect for model loading
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        setIsModelLoading(true);
+        await Promise.all([
+          faceapi.nets.ssdMobilenetv1.loadFromUri("/models"),
+          faceapi.nets.faceLandmark68Net.loadFromUri("/models"),
+          faceapi.nets.faceRecognitionNet.loadFromUri("/models")
+        ]);
+        setIsModelLoading(false);
+      } catch (error) {
+        console.error("Error loading models:", error);
+        toast.error("Error loading face detection models");
+      }
+    };
+    loadModels();
+  }, []);
 
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setVideo(e.target.files[0])
-      setSnapshots([])
+      const file = e.target.files[0];
+      setVideo(file);
+      setVideoUrl(URL.createObjectURL(file));
+      setSnapshots([]);
     }
   }
 
@@ -178,6 +200,13 @@ export default function VideoUploader() {
       setReferenceImage(e.target.files[0])
     }
   }
+
+  // Format timestamp function
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   const generateSnapshots = async () => {
     if (!video || !videoRef.current || !referenceImage || !imageRef.current || !canvasRef.current) return
@@ -209,8 +238,12 @@ export default function VideoUploader() {
     canvas.width = videoElement.videoWidth
     canvas.height = videoElement.videoHeight
 
-    const totalFrames = Math.floor(videoElement.duration * 30) // Assume 30 fps
-    const interval = Math.floor(totalFrames / 100) // Check 100 frames throughout the video
+    setProgress(0);
+    const totalFrames = Math.floor(videoElement.duration * 10)
+    let interval = Math.floor(totalFrames / 30)
+    
+    const processedTimes = new Set()
+    let faceDetected = false
 
     for (let i = 0; i < totalFrames; i += interval) {
       videoElement.currentTime = i / 30
@@ -218,20 +251,58 @@ export default function VideoUploader() {
         videoElement.onseeked = () => resolve(null)
       })
 
-      const detections = await faceapi.detectAllFaces(videoElement).withFaceLandmarks().withFaceDescriptors()
+      // Draw the full frame
+      const ctx = canvas.getContext("2d")
+      if (ctx) {
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
+      }
+
+      // Detect faces
+      const detections = await faceapi
+        .detectAllFaces(videoElement)
+        .withFaceLandmarks()
+        .withFaceDescriptors()
 
       for (const detection of detections) {
         const distance = faceapi.euclideanDistance(referenceDescriptor, detection.descriptor)
         if (distance < similarityThreshold) {
-          canvas.getContext("2d")?.drawImage(videoElement, 0, 0)
-          const snapshot = canvas.toDataURL("image/jpeg")
-          setSnapshots((prev) => [...prev, snapshot])
+          const timestamp = formatTime(i / 30)
+          
+          if (!processedTimes.has(timestamp)) {
+            processedTimes.add(timestamp)
+            
+            // Add snapshot immediately to state
+            setSnapshots(prev => [...prev, {
+              url: canvas.toDataURL("image/jpeg", 0.8),
+              timestamp: timestamp
+            }])
+
+            // If this is the first face detection, decrease interval
+            if (!faceDetected) {
+              faceDetected = true
+              interval = Math.floor(interval / 3)
+              i = Math.max(0, i - interval * 5)
+            }
+            
+            break
+          }
         }
       }
-    }
-    setIsProcessing(false)
-  }
 
+      const currentProgress = Math.round((i / totalFrames) * 100)
+      setProgress(currentProgress)
+    }
+
+    setProgress(0)
+    setIsProcessing(false)
+
+    // Show completion notification
+    if (processedTimes.size === 0) {
+      toast.warning("No matching faces found in the video")
+    } else {
+      toast.success(`Found ${processedTimes.size} matching faces`)
+    }
+  }
 
   const getFaceDescriptor = async (imgElement: HTMLImageElement) => {
     const detection = await faceapi.detectSingleFace(imgElement).withFaceLandmarks().withFaceDescriptor()
@@ -239,17 +310,10 @@ export default function VideoUploader() {
   }
 
   const handleReset = () => {
-    // Reset all states to initial values
-    setVideo(null)
-    setReferenceImage(null)
+    // Only reset snapshots
     setSnapshots([])
-    setSimilarityThreshold(0.6)
     setIsProcessing(false)
     setEmailPopupOpen(false)
-
-    // Reset the input values
-    if (videoInputRef.current) videoInputRef.current.value = '';
-    if (imageInputRef.current) imageInputRef.current.value = '';
   }
 
   return (
@@ -259,24 +323,35 @@ export default function VideoUploader() {
         <CardContent className="p-6">
           <div className="space-y-4">
             <div className={`flex items-center justify-center w-full videocontainer ${video ? 'bg-blue-100' : 'bg-gray-50'}`}>
-              <label
-                htmlFor="video-upload"
-                className={`flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg ${snapshots.length > 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-              >
-                <div className="flex flex-col items-center justify-center pt-5 pb-6 ">
-                  <Film className="w-8 h-8 mb-2 text-gray-400" />
-                  {video ? <p className="text-sm text-gray-600">Uploaded video: {video.name}</p> : <p className="text-sm text-gray-600">Click to upload video</p>}
+              {videoUrl ? (
+                <div className="w-full">
+                  <video 
+                    src={videoUrl} 
+                    controls 
+                    className="w-full rounded-lg"
+                    style={{ maxHeight: '300px' }}
+                  />
                 </div>
-                <Input 
-                  ref={videoInputRef}
-                  id="video-upload" 
-                  type="file" 
-                  accept=".mp4, .mkv, .avi, .mov, .wmv, .flv, .mpg, .mpeg" 
-                  className="hidden" 
-                  onChange={handleVideoChange}
-                  disabled={snapshots.length > 0}
-                />
-              </label>
+              ) : (
+                <label
+                  htmlFor="video-upload"
+                  className={`flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg ${snapshots.length > 0 ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6 ">
+                    <Film className="w-8 h-8 mb-2 text-gray-400" />
+                    {video ? <p className="text-sm text-gray-600">Uploaded video: {video.name}</p> : <p className="text-sm text-gray-600">Click to upload video</p>}
+                  </div>
+                  <Input 
+                    ref={videoInputRef}
+                    id="video-upload" 
+                    type="file" 
+                    accept=".mp4, .mkv, .avi, .mov, .wmv, .flv, .mpg, .mpeg" 
+                    className="hidden" 
+                    onChange={handleVideoChange}
+                    disabled={snapshots.length > 0}
+                  />
+                </label>
+              )}
             </div>
             {/* {video && <p className="text-sm text-gray-600">Selected video: {video.name}</p>} */}
 
@@ -311,7 +386,7 @@ export default function VideoUploader() {
               </label>
             </div>
 
-            <div className="space-y-2" style={{display:'none'}}>
+            <div className="space-y-2" >
               <label htmlFor="similarity-threshold" className="text-sm font-medium text-gray-700">
                 Similarity Threshold: {similarityThreshold.toFixed(2)}
               </label>
@@ -327,11 +402,16 @@ export default function VideoUploader() {
                   <div className="flex justify-center">
             <Button 
               onClick={generateSnapshots} 
-              disabled={!video || !referenceImage || isProcessing || snapshots.length > 0} 
-              className={`w-[70%] ${snapshots.length > 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+              disabled={!video || !referenceImage || isProcessing || snapshots.length > 0 || isModelLoading} 
+              className={`w-[70%] ${snapshots.length > 0 || isModelLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
                     
-              {isProcessing ? "Processing..." : "Start Face Detection"}
+              {isModelLoading 
+                ? "Loading models..."
+                : isProcessing 
+                  ? `Processing... ${progress}%`
+                  : "Start Face Detection"
+              }
             </Button>
                   </div>
           </div>
@@ -374,7 +454,7 @@ export default function VideoUploader() {
         onClose={() => setEmailPopupOpen(false)} 
         videoName={video?.name}
         imageName={referenceImage?.name}
-        snapshots={snapshots}
+        snapshots={snapshots.map(snapshot => snapshot.url)}
       />
     </>
   )

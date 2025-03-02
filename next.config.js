@@ -11,47 +11,12 @@ const nextConfig = {
       "path": false,
       "crypto": false,
     }
-    // Increase memory limit
-    config.performance = {
-      ...config.performance,
-      maxAssetSize: 1024 * 1024 * 1024,
-      maxEntrypointSize: 1024 * 1024 * 1024
-    }
     return config
   },
   // Add this to ignore specific warnings
   typescript: {
     ignoreBuildErrors: true,
-  },
-  // Add cross-origin isolation headers
-  async headers() {
-    return [
-      {
-        source: "/(.*)",
-        headers: [
-          {
-            key: "Cross-Origin-Embedder-Policy",
-            value: "require-corp",
-          },
-          {
-            key: "Cross-Origin-Opener-Policy",
-            value: "same-origin",
-          },
-          {
-            key: "Cross-Origin-Resource-Policy",
-            value: "cross-origin",
-          },
-          {
-            key: "Cross-Origin-Isolation",
-            value: "same-origin",
-          }
-        ],
-      },
-    ]
-  },
-  experimental: {
-    largePageDataBytes: 1024 * 1024 * 1024, // 1GB
-  },
+  }
 }
 
 module.exports = nextConfig 

@@ -208,7 +208,7 @@ export default function AddImage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
+                  placeholder="Enter person's email"
                   required
                 />
               </div>

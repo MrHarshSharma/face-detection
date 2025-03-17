@@ -1,24 +1,28 @@
 import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
 import './globals.css'
+import Navigation from '@/components/Navigation'
+
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Facial Detection Application',
-  description: 'Facial Detection Application made with love by Harsh sharma',
-  generator: 'v0.dev',
+  title: 'Facial ID',
+  description: 'Face Detection Application',
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
     <html lang="en">
-      <head>
-        <link rel="icon" href="/favicon.png" />
-        {/* Other head elements */}
-      </head>
-      <body>{children}</body>
+      <body className={inter.className}>
+        <Navigation />
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {children}
+        </main>
+      </body>
     </html>
   )
 }

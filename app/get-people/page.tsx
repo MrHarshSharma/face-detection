@@ -248,11 +248,11 @@ export default function GetPeople() {
   return (
     <>
       <ToastContainer />
-      <Card className="w-full shadow-none border-none p-0 ">
+      <Card className="w-full shadow-none border-none p-0">
         <CardContent className="p-6">
           <div className="space-y-6">
-            {/* Filters Section */}
-            <div className="space-y-4  border-b border-gray-200 pb-4">
+            {/* Filters Section - Make it sticky */}
+            <div className="sticky top-16 bg-white z-40 -mx-6 px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-2">
                 <Input
                   type="email"
@@ -260,7 +260,6 @@ export default function GetPeople() {
                   value={filters.email}
                   onChange={(e) => setFilters(prev => ({ ...prev, email: e.target.value }))}
                   className="w-300"
-                  
                 />
                 <Input
                   type="date"
@@ -281,114 +280,115 @@ export default function GetPeople() {
                   <option value="pending">Pending</option>
                 </select>
                 <div className="flex items-center gap-2 ml-auto">
-                <Button onClick={handleSearch} className="px-4">
-                  <Search className="w-4 h-4 mr-2" />
-                  Search
-                </Button>
-                
-                <Button 
-                  onClick={clearFilters}
-                  variant="outline"
-                  className="px-4"
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Clear
-                </Button>
+                  <Button onClick={handleSearch} className="px-4">
+                    <Search className="w-4 h-4 mr-2" />
+                    Search
+                  </Button>
+                  <Button 
+                    onClick={clearFilters}
+                    variant="outline"
+                    className="px-4"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Clear
+                  </Button>
                 </div>
               </div>
             </div>
 
-            {/* Results */}
-            {loading ? (
-              <div className="text-center py-4">Loading...</div>
-            ) : people.length === 0 ? (
-              <div className="text-center py-4">No records found</div>
-            ) : (
-              <div className="grid grid-cols-4 gap-4">
-                {people.map((person) => (
-                  <Card 
-                    key={person.id} 
-                    className={`p-4 w-full h-full ${
-                      person.completed ? 'bg-green-50' : ''
-                    }`}
-                  >
-                    <div className="flex justify-between items-start pb-2">
-                      
-                      <div className="flex gap-2 w-full pb-4 ">
-                      <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <input
-                            type="checkbox"
-                            checked={person.completed}
-                            onChange={() => toggleCompletion(person.id, person.completed)}
-                            disabled={updatingId === person.id}
-                            className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                          />
-                          {updatingId === person.id && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-                            </div>
-                          )}
+            {/* Results Section */}
+            <div className="pt-4"> {/* Add padding top to prevent content from jumping */}
+              {loading ? (
+                <div className="text-center py-4">Loading...</div>
+              ) : people.length === 0 ? (
+                <div className="text-center py-4">No records found</div>
+              ) : (
+                <div className="grid grid-cols-4 gap-4">
+                  {people.map((person) => (
+                    <Card 
+                      key={person.id} 
+                      className={`p-4 w-full h-full ${
+                        person.completed ? 'bg-green-50' : ''
+                      }`}
+                    >
+                      <div className="flex justify-between items-start pb-2">
+                        
+                        <div className="flex gap-2 w-full pb-4 ">
+                        <div className="flex items-center gap-2">
+                          <div className="relative">
+                            <input
+                              type="checkbox"
+                              checked={person.completed}
+                              onChange={() => toggleCompletion(person.id, person.completed)}
+                              disabled={updatingId === person.id}
+                              className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                            />
+                            {updatingId === person.id && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-sm text-gray-500">
+                            {updatingId === person.id 
+                              ? 'Updating...' 
+                              : person.completed 
+                                ? 'Completed' 
+                                : 'Pending'
+                            }
+                          </span>
                         </div>
-                        <span className="text-sm text-gray-500">
-                          {updatingId === person.id 
-                            ? 'Updating...' 
-                            : person.completed 
-                              ? 'Completed' 
-                              : 'Pending'
-                          }
-                        </span>
+                        <div className="flex gap-2 ml-auto">
+                       
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDownload(person)}
+                            className="bg-blue-50 hover:bg-blue-100 border-blue-200 h-7 w-7"
+                          >
+                            <Download className="w-2 h-2" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDelete(person.id)}
+                            className="h-7 w-7"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                           </div>
+                        </div>
                       </div>
-                      <div className="flex gap-2 ml-auto">
-                     
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownload(person)}
-                          className="bg-blue-50 hover:bg-blue-100 border-blue-200 h-7 w-7"
-                        >
-                          <Download className="w-2 h-2" />
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDelete(person.id)}
-                          className="h-7 w-7"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                         </div>
-                      </div>
-                    </div>
 
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-medium">{person.email}</h3>
-                        <p className="text-sm text-gray-500">
-                          Date: {new Date(person.date).toLocaleDateString()}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Time: {person.time}
-                        </p>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-medium">{person.email}</h3>
+                          <p className="text-sm text-gray-500">
+                            Date: {new Date(person.date).toLocaleDateString()}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Time: {person.time}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    
-                    {/* Image Grid */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
-                      {person.image_urls.map((url, index) => (
-                        <img
-                          key={index}
-                          src={url}
-                          alt={`Reference ${index + 1}`}
-                          className="w-10 h-10 object-cover rounded-lg cursor-pointer border border-gray-300"
-                          onClick={() => setSelectedPerson(person)}
-                        />
-                      ))}
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+                      
+                      {/* Image Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
+                        {person.image_urls.map((url, index) => (
+                          <img
+                            key={index}
+                            src={url}
+                            alt={`Reference ${index + 1}`}
+                            className="w-10 h-10 object-cover rounded-lg cursor-pointer border border-gray-300"
+                            onClick={() => setSelectedPerson(person)}
+                          />
+                        ))}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

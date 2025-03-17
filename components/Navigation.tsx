@@ -7,11 +7,11 @@ export default function Navigation() {
   const pathname = usePathname()
 
   return (
-    <nav className="bg-white shadow-lg mb-6">
+    <nav className="bg-white shadow-lg sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-start h-16">
           <div className="flex space-x-8">
-            {/* <Link 
+            <Link 
               href="/" 
               className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
                 pathname === '/' 
@@ -19,8 +19,8 @@ export default function Navigation() {
                   : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
               }`}
             >
-              Video Upload
-            </Link> */}
+              Dashboard
+            </Link>
             <Link 
               href="/add-image" 
               className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${

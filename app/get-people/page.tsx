@@ -4,11 +4,17 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Trash2, X, Download } from "lucide-react"
+import { Search, Trash2, X, Download, Mail } from "lucide-react"
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { supabase } from '@/lib/supabase'
 import JSZip from 'jszip'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface Person {
   id: string
@@ -28,6 +34,13 @@ interface Filters {
   status: 'all' | 'completed' | 'pending'
 }
 
+interface EmailModalProps {
+  isOpen: boolean
+  onClose: () => void
+  email: string
+  onSubmit: (formData: FormData) => void
+}
+
 export default function GetPeople() {
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,6 +53,10 @@ export default function GetPeople() {
     status: 'all'
   })
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [emailModal, setEmailModal] = useState<{ isOpen: boolean; email: string }>({
+    isOpen: false,
+    email: "",
+  })
 
   useEffect(() => {
     fetchPeople()
@@ -245,6 +262,92 @@ export default function GetPeople() {
     }
   }
 
+  const handleEmailSubmit = async (formData: FormData) => {
+    try {
+      const email = formData.get('email') as string
+      const file = formData.get('file') as File
+
+      if (!email || !file) {
+        toast.error('Email and file are required')
+        return
+      }
+
+      toast.info('Uploading file...')
+
+      // Find the person to update
+      const person = people.find(p => p.email === email)
+      if (!person) {
+        throw new Error('Person not found')
+      }
+
+      // Upload to drive using existing endpoint
+      const uploadFormData = new FormData()
+      uploadFormData.append('file', file)
+      uploadFormData.append('email', email)
+
+      const uploadResponse = await fetch('/api/upload-to-drive', {
+        method: 'POST',
+        body: uploadFormData,
+      })
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json()
+        throw new Error(errorData.error || 'Failed to upload file')
+      }
+
+      const { fileUrl } = await uploadResponse.json()
+
+      // Open Gmail compose window
+      const subject = encodeURIComponent('Your Moment with the Sacred Relic')
+      const body = encodeURIComponent(`Dear Esteemed Visitor,
+
+We sincerely thank you and deeply appreciate your patience and understanding.
+Please find your special moment with the relic:
+${fileUrl}
+
+This link will be accessible through Google Drive and expire in 7 days.
+
+Wishing you blessings and joy,
+The Photo Desk Team
+`)
+
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${subject}&body=${body}`
+      
+      // Open as popup window with specific dimensions
+      const width = 600
+      const height = 700
+      const left = (window.screen.width - width) / 2
+      const top = (window.screen.height - height) / 2
+      
+      window.open(
+        gmailUrl,
+        'EmailPopup',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+      )
+
+      // Update the completion status in Supabase
+      const { error: updateError } = await supabase
+        .from('ref_images')
+        .update({ completed: true })
+        .eq('id', person.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      // Update local state
+      setPeople(people.map(p => 
+        p.id === person.id ? { ...p, completed: true } : p
+      ))
+
+      toast.success('File uploaded, email window opened, and status updated')
+      setEmailModal({ isOpen: false, email: '' })
+    } catch (error) {
+      console.error('Error in upload process:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to process request')
+    }
+  }
+
   return (
     <>
       <ToastContainer />
@@ -339,7 +442,14 @@ export default function GetPeople() {
                           </span>
                         </div>
                         <div className="flex gap-2 ml-auto">
-                       
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEmailModal({ isOpen: true, email: person.email })}
+                            className="bg-purple-50 hover:bg-purple-100 border-purple-200 h-7 w-7"
+                          >
+                            <Mail className="w-4 h-4" />
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -413,6 +523,64 @@ export default function GetPeople() {
           </div>
         </div>
       )}
+
+      <EmailModal
+        isOpen={emailModal.isOpen}
+        onClose={() => setEmailModal({ isOpen: false, email: '' })}
+        email={emailModal.email}
+        onSubmit={handleEmailSubmit}
+      />
     </>
+  )
+}
+
+const EmailModal = ({ isOpen, onClose, email, onSubmit }: EmailModalProps) => {
+  return (
+    <Dialog open={isOpen} onOpenChange={() => onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Send Images via Email</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(e) => {
+          e.preventDefault()
+          const formData = new FormData(e.currentTarget)
+          onSubmit(formData)
+        }}>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                name="email"
+                defaultValue={email}
+                readOnly
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Upload ZIP File</label>
+              <Input
+                type="file"
+                name="file"
+                accept=".zip"
+                required
+                className="w-full"
+              />
+              <p className="text-xs text-gray-500">
+                Please upload a ZIP file containing the images
+              </p>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit">
+                Send Email
+              </Button>
+            </div>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 } 

@@ -305,7 +305,7 @@ We sincerely thank you and deeply appreciate your patience and understanding.
 Please find your special moment with the relic:
 ${fileUrl}
 
-This link will be accessible through Google Drive and expire in 7 days.
+This link will be accessible through Google Drive and will expire in 7 days.
 
 Wishing you blessings and joy,
 The Photo Desk Team

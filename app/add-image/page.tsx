@@ -71,6 +71,7 @@ export default function AddImage() {
         .from('ref_images')
         .select('email')
         .eq('email', email)
+        .eq('date', date)
         .single()
 
       if (checkError && checkError.code !== 'PGRST116') {
@@ -79,7 +80,7 @@ export default function AddImage() {
       }
 
       if (existingUser) {
-        toast.warning('This email is already recorded. Please use a different email.')
+        toast.warning('This user and date is already recorded. Please use a different email or date.')
         setIsSubmitting(false)
         return
       }

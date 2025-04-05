@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Trash2, X, Download, Mail } from "lucide-react"
+import { Search, Trash2, X, Download, Mail, Edit } from "lucide-react"
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { supabase } from '@/lib/supabase'
@@ -15,6 +15,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface Person {
   id: string
@@ -41,6 +47,19 @@ interface EmailModalProps {
   onSubmit: (formData: FormData) => void
 }
 
+interface EditModalProps {
+  isOpen: boolean
+  onClose: () => void
+  person: Person | null
+  onSubmit: (id: string, data: { 
+    email: string
+    date: string
+    time: string
+    newImages: File[]
+    deletedImageUrls: string[]
+  }) => void
+}
+
 export default function GetPeople() {
   const [people, setPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,6 +75,10 @@ export default function GetPeople() {
   const [emailModal, setEmailModal] = useState<{ isOpen: boolean; email: string }>({
     isOpen: false,
     email: "",
+  })
+  const [editModal, setEditModal] = useState<{ isOpen: boolean; person: Person | null }>({
+    isOpen: false,
+    person: null,
   })
 
   useEffect(() => {
@@ -348,6 +371,86 @@ The Photo Desk Team
     }
   }
 
+  const handleEditSubmit = async (id: string, data: { 
+    email: string
+    date: string
+    time: string
+    newImages: File[]
+    deletedImageUrls: string[]
+  }) => {
+    try {
+      // First handle image updates
+      const person = people.find(p => p.id === id)
+      if (!person) throw new Error('Person not found')
+
+      // Delete selected images from storage
+      for (const url of data.deletedImageUrls) {
+        const fileName = url.split('/').pop()
+        if (fileName) {
+          const { error: storageError } = await supabase.storage
+            .from('images')
+            .remove([fileName])
+          if (storageError) throw storageError
+        }
+      }
+
+      // Upload new images
+      const newImageUrls: string[] = []
+      for (const file of data.newImages) {
+        const fileName = `${Date.now()}_${file.name}`
+        const { error: uploadError, data: uploadData } = await supabase.storage
+          .from('images')
+          .upload(fileName, file)
+        
+        if (uploadError) throw uploadError
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('images')
+          .getPublicUrl(fileName)
+
+        newImageUrls.push(publicUrl)
+      }
+
+      // Update database record
+      const { error } = await supabase
+        .from('ref_images')
+        .update({
+          email: data.email,
+          date: data.date,
+          time: data.time,
+          image_urls: [
+            ...person.image_urls.filter(url => !data.deletedImageUrls.includes(url)),
+            ...newImageUrls
+          ]
+        })
+        .eq('id', id)
+
+      if (error) throw error
+
+      // Update local state
+      setPeople(people.map(p => 
+        p.id === id 
+          ? {
+              ...p,
+              email: data.email,
+              date: data.date,
+              time: data.time,
+              image_urls: [
+                ...p.image_urls.filter(url => !data.deletedImageUrls.includes(url)),
+                ...newImageUrls
+              ]
+            }
+          : p
+      ))
+
+      toast.success('Record updated successfully')
+      setEditModal({ isOpen: false, person: null })
+    } catch (error) {
+      console.error('Error updating record:', error)
+      toast.error('Failed to update record')
+    }
+  }
+
   return (
     <>
       <ToastContainer />
@@ -417,7 +520,7 @@ The Photo Desk Team
                       <div className="flex justify-between items-start pb-2">
                         
                         <div className="flex gap-2 w-full pb-4 ">
-                        <div className="flex items-center gap-2">
+                        {/* <div className="flex items-center gap-2">
                           <div className="relative">
                             <input
                               type="checkbox"
@@ -440,33 +543,43 @@ The Photo Desk Team
                                 : 'Pending'
                             }
                           </span>
-                        </div>
+                        </div> */}
                         <div className="flex gap-2 ml-auto">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEmailModal({ isOpen: true, email: person.email })}
-                            className="bg-purple-50 hover:bg-purple-100 border-purple-200 h-7 w-7"
-                          >
-                            <Mail className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDownload(person)}
-                            className="bg-blue-50 hover:bg-blue-100 border-blue-200 h-7 w-7"
-                          >
-                            <Download className="w-2 h-2" />
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDelete(person.id)}
-                            className="h-7 w-7"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                           </div>
+                          <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setEditModal({ isOpen: true, person })}
+                                  className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200 h-7 w-7"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Edit Record</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDelete(person.id)}
+                                  className="h-7 w-7"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Delete Record</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
                         </div>
                       </div>
 
@@ -530,6 +643,13 @@ The Photo Desk Team
         email={emailModal.email}
         onSubmit={handleEmailSubmit}
       />
+
+      <EditModal
+        isOpen={editModal.isOpen}
+        onClose={() => setEditModal({ isOpen: false, person: null })}
+        person={editModal.person}
+        onSubmit={handleEditSubmit}
+      />
     </>
   )
 }
@@ -576,6 +696,185 @@ const EmailModal = ({ isOpen, onClose, email, onSubmit }: EmailModalProps) => {
               </Button>
               <Button type="submit">
                 Send Email
+              </Button>
+            </div>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+const EditModal = ({ isOpen, onClose, person, onSubmit }: EditModalProps) => {
+  const [isLoading, setIsLoading] = useState(false)
+  const [formData, setFormData] = useState({
+    email: '',
+    date: '',
+    time: '',
+    newImages: [] as File[],
+    deletedImageUrls: [] as string[]
+  })
+
+  useEffect(() => {
+    if (person) {
+      setFormData({
+        email: person.email,
+        date: person.date,
+        time: person.time,
+        newImages: [],
+        deletedImageUrls: []
+      })
+    }
+  }, [person])
+
+  const handleImageDelete = (imageUrl: string) => {
+    setFormData(prev => ({
+      ...prev,
+      deletedImageUrls: [...prev.deletedImageUrls, imageUrl]
+    }))
+  }
+
+  const handleNewImages = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    setFormData(prev => ({
+      ...prev,
+      newImages: [...prev.newImages, ...files]
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (person) {
+      setIsLoading(true)
+      try {
+        await onSubmit(person.id, formData)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={() => !isLoading && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Edit Record</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                required
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Date</label>
+              <Input
+                type="date"
+                value={formData.date}
+                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                required
+                className="w-full"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Time</label>
+              <Input
+                type="time"
+                value={formData.time}
+                onChange={(e) => setFormData(prev => ({ ...prev, time: e.target.value }))}
+                required
+                className="w-full"
+              />
+            </div>
+
+            {/* Current Images */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Current Images</label>
+              <div className="grid grid-cols-4 gap-4">
+                {person?.image_urls
+                  .filter(url => !formData.deletedImageUrls.includes(url))
+                  .map((url, index) => (
+                    <div key={url} className="relative group">
+                      <img
+                        src={url}
+                        alt={`Image ${index + 1}`}
+                        className="w-full h-24 object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleImageDelete(url)}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* New Images */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Add New Images</label>
+              <Input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleNewImages}
+                className="w-full"
+              />
+              {formData.newImages.length > 0 && (
+                <div className="grid grid-cols-4 gap-4 mt-2">
+                  {formData.newImages.map((file, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={`New Image ${index + 1}`}
+                        className="w-full h-24 object-cover rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          newImages: prev.newImages.filter((_, i) => i !== index)
+                        }))}
+                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onClose}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit"
+                disabled={isLoading}
+                className="min-w-[100px]"
+              >
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Saving...</span>
+                  </div>
+                ) : (
+                  'Save Changes'
+                )}
               </Button>
             </div>
           </div>

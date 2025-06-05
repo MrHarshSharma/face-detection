@@ -39,7 +39,17 @@ export default function Navigation() {
                   : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
               }`}
             >
-              Get People
+              People
+            </Link>
+            <Link 
+              href="/find-person" 
+              className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                pathname === '/find-person' 
+                  ? 'border-black text-gray-900' 
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+              }`}
+            >
+              Find People
             </Link>
           </div>
         </div>

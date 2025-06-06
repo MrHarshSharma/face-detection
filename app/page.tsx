@@ -62,43 +62,58 @@ export default function Home() {
 
       if (countError) throw countError;
 
-      // Get records for other analytics (limited to 2000 for performance)
-      const { data: records, error } = await supabase
+      // Get completed records count
+      const { count: completedCount, error: completedError } = await supabase
         .from('ref_images')
-        .select('*')
-        .order('date', { ascending: false })
-        .limit(2000);
+        .select('*', { count: 'exact', head: true })
+        .eq('completed', true)
 
-      if (error) throw error;
+      if (completedError) throw completedError;
 
-      // Calculate statistics from fetched records
-      const completedRecords = records?.filter(r => r.completed).length || 0;
-      const pendingRecords = (records?.length || 0) - completedRecords;
+      // Get pending records count  
+      const { count: pendingCount, error: pendingError } = await supabase
+        .from('ref_images')
+        .select('*', { count: 'exact', head: true })
+        .eq('completed', false)
 
-      // Calculate daily statistics
-      const dailyStats = records?.reduce((acc: { [key: string]: number }, record) => {
-        const date = record.date;
-        acc[date] = (acc[date] || 0) + 1;
-        return acc;
-      }, {});
+      if (pendingError) throw pendingError;
 
-      const formattedDailyStats = Object.entries(dailyStats || {})
-        .map(([date, count]) => ({ date, count }))
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 7); // Last 7 days
+      // Get today's date for today's records count
+      const today = new Date().toISOString().split('T')[0]
+      const { count: todayCount, error: todayError } = await supabase
+        .from('ref_images')
+        .select('*', { count: 'exact', head: true })
+        .eq('date', today)
+
+      if (todayError) throw todayError;
+
+      // Get daily statistics for last 7 days using aggregation
+      const last7Days = []
+      for (let i = 0; i < 7; i++) {
+        const date = new Date()
+        date.setDate(date.getDate() - i)
+        const dateString = date.toISOString().split('T')[0]
+        
+        const { count: dayCount, error: dayError } = await supabase
+          .from('ref_images')
+          .select('*', { count: 'exact', head: true })
+          .eq('date', dateString)
+
+        if (!dayError) {
+          last7Days.push({ date: dateString, count: dayCount || 0 })
+        }
+      }
 
       setAnalytics({
-        totalRecords: totalCount || 0, // Use exact count from database
-        completedRecords,
-        pendingRecords,
-        dailyStats: formattedDailyStats
+        totalRecords: totalCount || 0,
+        completedRecords: completedCount || 0,
+        pendingRecords: pendingCount || 0,
+        dailyStats: last7Days
       });
 
-      // Show total count in console and toast
+      // Show total count in console
       console.log(`Total records in database: ${totalCount}`)
-      if (totalCount !== null) {
-        toast.info(`Total records in database: ${totalCount}`)
-      }
+      console.log(`Completed: ${completedCount}, Pending: ${pendingCount}`)
 
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -157,7 +172,10 @@ export default function Home() {
             <div>
               <p className="text-sm text-gray-600">Today's Records</p>
               <p className="text-2xl font-bold">
-                {loading ? '...' : analytics.dailyStats[0]?.count || 0}
+                {loading ? '...' : analytics.dailyStats.find(stat => {
+                  const today = new Date().toISOString().split('T')[0]
+                  return stat.date === today
+                })?.count || 0}
               </p>
             </div>
           </div>

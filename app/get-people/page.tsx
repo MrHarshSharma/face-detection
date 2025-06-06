@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Trash2, X, Download, Mail, Edit, Scan } from "lucide-react"
+import { Search, Trash2, X, Download, Mail, Edit, Scan, ChevronLeft, ChevronRight } from "lucide-react"
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { supabase } from '@/lib/supabase'
@@ -61,7 +61,8 @@ interface EditModalProps {
 }
 
 export default function GetPeople() {
-  const [allPeople, setAllPeople] = useState<Person[]>([])
+  const [people, setPeople] = useState<Person[]>([])
+  const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
   const [filters, setFilters] = useState<Filters>({
@@ -80,59 +81,65 @@ export default function GetPeople() {
     isOpen: false,
     person: null,
   })
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const recordsPerPage = 100
 
-  // Computed filtered people based on current filters
-  const people = allPeople.filter(person => {
-    // Email filter
-    if (filters.email.trim() && !person.email.toLowerCase().includes(filters.email.toLowerCase())) {
-      return false
-    }
-    
-    // Date filter
-    if (filters.date && person.date !== filters.date) {
-      return false
-    }
-    
-    // Status filter
-    if (filters.status !== 'all') {
-      const isCompleted = filters.status === 'completed'
-      if (person.completed !== isCompleted) {
-        return false
-      }
-    }
-    
-    // Time range filter
-    if (filters.startTime && person.time < filters.startTime) {
-      return false
-    }
-    
-    if (filters.endTime && person.time > filters.endTime) {
-      return false
-    }
-    
-    return true
-  })
+  // Pagination calculations
+  const totalPages = Math.ceil(totalCount / recordsPerPage)
+  const startIndex = (currentPage - 1) * recordsPerPage + 1
+  const endIndex = Math.min(startIndex + recordsPerPage - 1, totalCount)
 
   useEffect(() => {
     fetchPeople()
-   
-  }, [])
-
-  
+  }, [currentPage, filters]) // Fetch when page or filters change
 
   const fetchPeople = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      
+      // Calculate range for current page
+      const from = (currentPage - 1) * recordsPerPage
+      const to = from + recordsPerPage - 1
+
+      // Build query with filters
+      let query = supabase
         .from('ref_images')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
-        .limit(2000)
+        .range(from, to)
+
+      // Apply filters
+      if (filters.email.trim()) {
+        query = query.ilike('email', `%${filters.email}%`)
+      }
+
+      if (filters.date) {
+        query = query.eq('date', filters.date)
+      }
+
+      if (filters.status !== 'all') {
+        query = query.eq('completed', filters.status === 'completed')
+      }
+
+      if (filters.startTime && filters.endTime) {
+        query = query
+          .gte('time', filters.startTime)
+          .lte('time', filters.endTime)
+      } else if (filters.startTime) {
+        query = query.gte('time', filters.startTime)
+      } else if (filters.endTime) {
+        query = query.lte('time', filters.endTime)
+      }
+
+      const { data, error, count } = await query
 
       if (error) throw error
 
-      setAllPeople(data || [])
-      toast.success(`Loaded ${data?.length || 0} records out of total available`)
+      setPeople(data || [])
+      setTotalCount(count || 0)
+      
     } catch (error) {
       console.error('Error fetching people:', error)
       toast.error('Error loading data')
@@ -142,8 +149,7 @@ export default function GetPeople() {
   }
 
   const handleSearch = () => {
-    // No need to fetch from database - filtering is done automatically via computed people array
-    // This function can be removed or kept for future enhancements
+    setCurrentPage(1) // Reset to first page when searching
   }
 
   const clearFilters = () => {
@@ -154,14 +160,14 @@ export default function GetPeople() {
       endTime: "",
       status: 'all'
     })
-    // No need to fetch again - the computed people array will update automatically
+    setCurrentPage(1) // Reset to first page when clearing filters
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this record?')) return
 
     try {
-      const person = allPeople.find(p => p.id === id)
+      const person = people.find(p => p.id === id)
       if (!person) return
 
       // Delete images from storage
@@ -185,7 +191,9 @@ export default function GetPeople() {
       if (dbError) throw dbError
 
       toast.success('Record deleted successfully')
-      setAllPeople(allPeople.filter(p => p.id !== id))
+      
+      // Refresh the current page data
+      await fetchPeople()
     } catch (error) {
       console.error('Error deleting record:', error)
       toast.error('Error deleting record')
@@ -203,18 +211,14 @@ export default function GetPeople() {
 
       if (error) throw error
 
-      // Update local state
-      setAllPeople(allPeople.map(person => 
-        person.id === id 
-          ? { ...person, completed: !currentStatus }
-          : person
-      ))
-
       toast.success(
         !currentStatus 
           ? 'Marked as completed' 
           : 'Marked as incomplete'
       )
+      
+      // Refresh the current page data
+      await fetchPeople()
     } catch (error) {
       console.error('Error updating completion status:', error)
       toast.error('Error updating status')
@@ -294,7 +298,7 @@ export default function GetPeople() {
       toast.info('Uploading file...')
 
       // Find the person to update
-      const person = allPeople.find(p => p.email === email)
+      const person = people.find(p => p.email === email)
       if (!person) {
         throw new Error('Person not found')
       }
@@ -355,7 +359,7 @@ The Photo Desk Team
       }
 
       // Update local state
-      setAllPeople(allPeople.map(p => 
+      setPeople(people.map(p => 
         p.id === person.id ? { ...p, completed: true } : p
       ))
 
@@ -376,7 +380,7 @@ The Photo Desk Team
   }) => {
     try {
       // First handle image updates
-      const person = allPeople.find(p => p.id === id)
+      const person = people.find(p => p.id === id)
       if (!person) throw new Error('Person not found')
 
       // Delete selected images from storage
@@ -424,7 +428,7 @@ The Photo Desk Team
       if (error) throw error
 
       // Update local state
-      setAllPeople(allPeople.map(p => 
+      setPeople(people.map(p => 
         p.id === id 
           ? {
               ...p,
@@ -481,21 +485,18 @@ The Photo Desk Team
                   type="email"
                   placeholder="Search by email"
                   value={filters.email}
-                  onChange={(e) => setFilters(prev => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) => setFilters({ ...filters, email: e.target.value })}
                   className="w-300"
                 />
                 <Input
                   type="date"
                   value={filters.date}
-                  onChange={(e) => setFilters(prev => ({ ...prev, date: e.target.value }))}
+                  onChange={(e) => setFilters({ ...filters, date: e.target.value })}
                   className="w-40"
                 />
                 <select
                   value={filters.status}
-                  onChange={(e) => setFilters(prev => ({ 
-                    ...prev, 
-                    status: e.target.value as 'all' | 'completed' | 'pending'
-                  }))}
+                  onChange={(e) => setFilters({ ...filters, status: e.target.value as 'all' | 'completed' | 'pending' })}
                   className="h-10 rounded-md border border-input bg-background px-3 py-2 w-300"
                 >
                   <option value="all">All Status</option>
@@ -526,70 +527,59 @@ The Photo Desk Team
               ) : people.length === 0 ? (
                 <div className="text-center py-4">No records found</div>
               ) : (
-                <div className="grid grid-cols-4 gap-4">
-                  {people.map((person) => (
-                    <Card 
-                      key={person.id} 
-                      className={`p-4 w-full h-full ${
-                        person.completed ? 'bg-green-50' : ''
-                      }`}
-                    >
-                      <div className="flex justify-between items-start pb-2">
-                        
-                        <div className="flex gap-2 w-full pb-4 ">
-                        {/* <div className="flex items-center gap-2">
-                          <div className="relative">
-                            <input
-                              type="checkbox"
-                              checked={person.completed}
-                              onChange={() => toggleCompletion(person.id, person.completed)}
-                              disabled={updatingId === person.id}
-                              className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
-                            />
-                            {updatingId === person.id && (
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="w-4 h-4 border-2 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-                              </div>
-                            )}
-                          </div>
-                          <span className="text-sm text-gray-500">
-                            {updatingId === person.id 
-                              ? 'Updating...' 
-                              : person.completed 
-                                ? 'Completed' 
-                                : 'Pending'
-                            }
-                          </span>
-                        </div> */}
-                        <div className="flex gap-2 ml-auto">
-                          <TooltipProvider delayDuration={100}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleFacialRecognition(person)}
-                                  className="bg-indigo-50 hover:bg-indigo-100 border-indigo-200 h-7 w-7"
-                                >
-                                  <Scan className="w-4 h-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Facial Recognition</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider delayDuration={100}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                                  onClick={() => setEditModal({ isOpen: true, person })}
-                                  className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200 h-7 w-7"
-                          >
-                                  <Edit className="w-4 h-4" />
-                          </Button>
+                <>
+                  {/* Pagination Info and Controls - Top */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-sm text-gray-600">
+                      Showing {startIndex} to {endIndex} of {totalCount} records
+                    </div>
+                    <PaginationControls 
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                      onPageChange={setCurrentPage}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-4">
+                    {people.map((person) => (
+                      <Card 
+                        key={person.id} 
+                        className={`p-4 w-full h-full ${
+                          person.completed ? 'bg-green-50' : ''
+                        }`}
+                      >
+                        <div className="flex justify-between items-start pb-2">
+                          
+                          <div className="flex gap-2 w-full pb-4 ">
+                          <div className="flex gap-2 ml-auto">
+                            <TooltipProvider delayDuration={100}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleFacialRecognition(person)}
+                                    className="bg-indigo-50 hover:bg-indigo-100 border-indigo-200 h-7 w-7"
+                                  >
+                                    <Scan className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Facial Recognition</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider delayDuration={100}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                                    onClick={() => setEditModal({ isOpen: true, person })}
+                                    className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200 h-7 w-7"
+                            >
+                                    <Edit className="w-4 h-4" />
+                            </Button>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p>Edit Record</p>
@@ -599,14 +589,14 @@ The Photo Desk Team
                           <TooltipProvider delayDuration={100}>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDelete(person.id)}
-                            className="h-7 w-7"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDelete(person.id)}
+                              className="h-7 w-7"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p>Delete Record</p>
@@ -614,36 +604,48 @@ The Photo Desk Team
                             </Tooltip>
                           </TooltipProvider>
                            </div>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="font-medium">{person.email}</h3>
-                          <p className="text-sm text-gray-500">
-                            Date: {new Date(person.date).toLocaleDateString()}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            Time: {person.time}
-                          </p>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-medium">{person.email}</h3>
+                            <p className="text-sm text-gray-500">
+                              Date: {new Date(person.date).toLocaleDateString()}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Time: {person.time}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      
-                      {/* Image Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
-                        {person.image_urls.map((url, index) => (
-                          <img
-                            key={index}
-                            src={url}
-                            alt={`Reference ${index + 1}`}
-                            className="w-10 h-10 object-cover rounded-lg cursor-pointer border border-gray-300"
-                            onClick={() => setSelectedPerson(person)}
-                          />
-                        ))}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
+                        
+                        {/* Image Grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
+                          {person.image_urls.map((url, index) => (
+                            <img
+                              key={index}
+                              src={url}
+                              alt={`Reference ${index + 1}`}
+                              className="w-10 h-10 object-cover rounded-lg cursor-pointer border border-gray-300"
+                              onClick={() => setSelectedPerson(person)}
+                            />
+                          ))}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+
+                  {/* Pagination Controls - Bottom */}
+                  {totalPages > 1 && (
+                    <div className="flex justify-center mt-6">
+                      <PaginationControls 
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={setCurrentPage}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -915,5 +917,95 @@ const EditModal = ({ isOpen, onClose, person, onSubmit }: EditModalProps) => {
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Pagination Controls Component
+interface PaginationControlsProps {
+  currentPage: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}
+
+const PaginationControls = ({ currentPage, totalPages, onPageChange }: PaginationControlsProps) => {
+  const getVisiblePages = () => {
+    const visiblePages: (number | string)[] = []
+    
+    if (totalPages <= 7) {
+      // Show all pages if 7 or fewer
+      for (let i = 1; i <= totalPages; i++) {
+        visiblePages.push(i)
+      }
+    } else {
+      // Always show first page
+      visiblePages.push(1)
+      
+      if (currentPage > 4) {
+        visiblePages.push('...')
+      }
+      
+      // Show pages around current page
+      const start = Math.max(2, currentPage - 1)
+      const end = Math.min(totalPages - 1, currentPage + 1)
+      
+      for (let i = start; i <= end; i++) {
+        visiblePages.push(i)
+      }
+      
+      if (currentPage < totalPages - 3) {
+        visiblePages.push('...')
+      }
+      
+      // Always show last page
+      if (totalPages > 1) {
+        visiblePages.push(totalPages)
+      }
+    }
+    
+    return visiblePages
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      {/* Previous button */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="px-2"
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </Button>
+      
+      {/* Page numbers */}
+      {getVisiblePages().map((page, index) => (
+        <div key={index}>
+          {typeof page === 'string' ? (
+            <span className="px-2 py-1 text-gray-500">...</span>
+          ) : (
+            <Button
+              variant={currentPage === page ? "default" : "outline"}
+              size="sm"
+              onClick={() => onPageChange(page)}
+              className="px-3"
+            >
+              {page}
+            </Button>
+          )}
+        </div>
+      ))}
+      
+      {/* Next button */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="px-2"
+      >
+        <ChevronRight className="w-4 h-4" />
+      </Button>
+    </div>
   )
 } 

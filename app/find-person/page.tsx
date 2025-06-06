@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Upload, User, FolderOpen, AlertCircle } from "lucide-react"
+import { Search, Upload, User, FolderOpen, AlertCircle, ChevronLeft, ChevronRight, X } from "lucide-react"
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 
@@ -16,8 +16,8 @@ interface MatchResult {
 }
 
 export default function FindPerson() {
-  const [referenceImage, setReferenceImage] = useState<File | null>(null)
-  const [referenceImageUrl, setReferenceImageUrl] = useState<string>("")
+  const [referenceImages, setReferenceImages] = useState<File[]>([])
+  const [referenceImageUrls, setReferenceImageUrls] = useState<string[]>([])
   const [folderImages, setFolderImages] = useState<File[]>([])
   const [loading, setLoading] = useState(false)
   const [matches, setMatches] = useState<MatchResult[]>([])
@@ -25,6 +25,7 @@ export default function FindPerson() {
   const [selectedMatch, setSelectedMatch] = useState<MatchResult | null>(null)
   const [processedCount, setProcessedCount] = useState(0)
   const [processingStarted, setProcessingStarted] = useState(false)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
   
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -61,16 +62,66 @@ export default function FindPerson() {
     loadModels()
   }, [])
 
-  const handleReferenceImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file && file.type.startsWith('image/')) {
-      setReferenceImage(file)
-      const url = URL.createObjectURL(file)
-      setReferenceImageUrl(url)
-      toast.success('Reference image selected')
-    } else {
-      toast.error('Please select a valid image file')
+  // Load reference images from localStorage if available
+  useEffect(() => {
+    const loadReferenceImages = async () => {
+      try {
+        const referenceData = localStorage.getItem('facialRecognitionReference')
+        if (referenceData) {
+          const data = JSON.parse(referenceData)
+          
+          // Check if data is not too old (within 1 hour)
+          const isRecent = Date.now() - data.timestamp < 3600000
+          
+          if (isRecent && data.images && data.images.length > 0) {
+            try {
+              // Load all images as reference images
+              const imageFiles: File[] = []
+              const imageUrls: string[] = []
+              
+              for (let i = 0; i < data.images.length; i++) {
+                const imageUrl = data.images[i]
+                const response = await fetch(imageUrl)
+                const blob = await response.blob()
+                const file = new File([blob], `reference-${data.email}-${i + 1}.jpg`, { type: 'image/jpeg' })
+                
+                imageFiles.push(file)
+                imageUrls.push(imageUrl)
+              }
+              
+              setReferenceImages(imageFiles)
+              setReferenceImageUrls(imageUrls)
+              
+              toast.success(`${imageFiles.length} reference images loaded for ${data.email}`)
+              
+              // Clear the localStorage after use
+              localStorage.removeItem('facialRecognitionReference')
+            } catch (error) {
+              console.error('Error loading reference images:', error)
+              toast.error('Failed to load reference images')
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing reference data:', error)
+      }
     }
+
+    loadReferenceImages()
+  }, [])
+
+  const handleReferenceImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    const imageFiles = files.filter(file => file.type.startsWith('image/'))
+    
+    if (imageFiles.length === 0) {
+      toast.error('Please select valid image files')
+      return
+    }
+    
+    setReferenceImages(imageFiles)
+    setReferenceImageUrls(imageFiles.map(file => URL.createObjectURL(file)))
+    toast.success(`${imageFiles.length} reference images selected`)
   }
 
   const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,6 +137,19 @@ export default function FindPerson() {
     toast.success(`${imageFiles.length} images loaded from folder`)
   }
 
+  const removeReferenceImage = (indexToRemove: number) => {
+    const newReferenceImages = referenceImages.filter((_, index) => index !== indexToRemove)
+    const newReferenceImageUrls = referenceImageUrls.filter((_, index) => index !== indexToRemove)
+    
+    // Revoke the URL to prevent memory leaks
+    URL.revokeObjectURL(referenceImageUrls[indexToRemove])
+    
+    setReferenceImages(newReferenceImages)
+    setReferenceImageUrls(newReferenceImageUrls)
+    
+    toast.success('Reference image removed')
+  }
+
   const getImageElement = (file: File): Promise<HTMLImageElement> => {
     return new Promise((resolve, reject) => {
       const img = new Image()
@@ -96,8 +160,8 @@ export default function FindPerson() {
   }
 
   const findMatches = async () => {
-    if (!referenceImage || folderImages.length === 0) {
-      toast.error('Please select both reference image and folder')
+    if (referenceImages.length === 0 || folderImages.length === 0) {
+      toast.error('Please select both reference images and folder')
       return
     }
 
@@ -115,20 +179,30 @@ export default function FindPerson() {
       // @ts-ignore
       const faceapi = window.faceapi
       
-      // Get reference face descriptor
-      const referenceImg = await getImageElement(referenceImage)
-      const referenceDetection = await faceapi
-        .detectSingleFace(referenceImg)
-        .withFaceLandmarks()
-        .withFaceDescriptor()
+      // Get reference face descriptors from all reference images
+      const referenceFaceDescriptors: Float32Array[] = []
+      
+      for (const refImage of referenceImages) {
+        const referenceImg = await getImageElement(refImage)
+        const referenceDetections = await faceapi
+          .detectAllFaces(referenceImg)
+          .withFaceLandmarks()
+          .withFaceDescriptors()
 
-      if (!referenceDetection) {
-        toast.error('No face detected in reference image')
+        // Add all face descriptors from this reference image
+        for (const detection of referenceDetections) {
+          referenceFaceDescriptors.push(detection.descriptor)
+        }
+      }
+
+      if (referenceFaceDescriptors.length === 0) {
+        toast.error('No faces detected in reference images')
         setLoading(false)
         return
       }
 
-      const referenceFaceDescriptor = referenceDetection.descriptor
+      toast.info(`Found ${referenceFaceDescriptors.length} reference faces from ${referenceImages.length} images`)
+
       const foundMatches: MatchResult[] = []
       
       // Process images in parallel batches for faster results
@@ -138,6 +212,8 @@ export default function FindPerson() {
       for (let i = 0; i < folderImages.length; i += batchSize) {
         batches.push(folderImages.slice(i, i + batchSize))
       }
+
+      let currentProcessedCount = 0
 
       // Process each batch
       for (const batch of batches) {
@@ -151,17 +227,23 @@ export default function FindPerson() {
               .withFaceLandmarks()
               .withFaceDescriptors()
 
-            // Check each face in the image
+            // Check each face in the image against all reference faces
             for (const detection of detections) {
-              const distance = faceapi.euclideanDistance(referenceFaceDescriptor, detection.descriptor)
-              const similarity = Math.max(0, 1 - distance) * 100
+              let bestSimilarity = 0
+              
+              // Compare with each reference face descriptor
+              for (const refDescriptor of referenceFaceDescriptors) {
+                const distance = faceapi.euclideanDistance(refDescriptor, detection.descriptor)
+                const similarity = Math.max(0, 1 - distance) * 100
+                bestSimilarity = Math.max(bestSimilarity, similarity)
+              }
 
-              // Lower threshold for quicker results
-              if (similarity > 50) {
+              // Use the best similarity score
+              if (bestSimilarity > 50) {
                 return {
                   file,
                   imageUrl: URL.createObjectURL(file),
-                  similarity: Math.round(similarity),
+                  similarity: Math.round(bestSimilarity),
                   fileName: file.name
                 }
               }
@@ -184,10 +266,12 @@ export default function FindPerson() {
           setMatches([...foundMatches])
         }
 
-        setProcessedCount(prev => prev + batch.length)
+        // Update counts
+        currentProcessedCount += batch.length
+        setProcessedCount(currentProcessedCount)
         
-        // Update progress more frequently
-        toast.info(`Processed: ${processedCount + batch.length}/${folderImages.length} - Found: ${foundMatches.length} matches`, {
+        // Update progress more frequently with correct count
+        toast.info(`Processed: ${currentProcessedCount}/${folderImages.length} - Found: ${foundMatches.length} matches`, {
           toastId: 'progress',
           autoClose: 1000
         })
@@ -208,14 +292,53 @@ export default function FindPerson() {
   }
 
   const clearAll = () => {
-    setReferenceImage(null)
-    setReferenceImageUrl("")
+    setReferenceImages([])
+    setReferenceImageUrls([])
     setFolderImages([])
     setMatches([])
     setSelectedMatch(null)
     setProcessedCount(0)
     setProcessingStarted(false)
+    setCurrentImageIndex(0)
   }
+
+  const filteredMatches = matches.filter(m => m.similarity >= 50)
+
+  const navigateToImage = (index: number) => {
+    if (index >= 0 && index < filteredMatches.length) {
+      setCurrentImageIndex(index)
+      setSelectedMatch(filteredMatches[index])
+    }
+  }
+
+  const goToPrevious = () => {
+    navigateToImage(currentImageIndex - 1)
+  }
+
+  const goToNext = () => {
+    navigateToImage(currentImageIndex + 1)
+  }
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (selectedMatch) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          goToPrevious()
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault()
+          goToNext()
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          setSelectedMatch(null)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [selectedMatch, currentImageIndex, filteredMatches.length])
 
   return (
     <>
@@ -227,7 +350,7 @@ export default function FindPerson() {
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Find Person in Images</h1>
-            <p className="text-gray-600">Upload a reference image and select a folder to find matching faces</p>
+            <p className="text-gray-600">Upload reference images and select a folder to find matching faces</p>
           </div>
 
           {/* Status Indicator */}
@@ -257,21 +380,67 @@ export default function FindPerson() {
                 <div className="space-y-4">
                   <label className="text-sm font-medium flex items-center gap-2">
                     <User className="w-4 h-4" />
-                    Reference Image
+                    Reference Images
                   </label>
                   <Input
                     type="file"
                     accept="image/*"
                     onChange={handleReferenceImageChange}
                     className="w-full"
+                    multiple
                   />
-                  {referenceImageUrl && (
+                  {referenceImageUrls.length > 0 && (
                     <div className="mt-4">
-                      <img
-                        src={referenceImageUrl}
-                        alt="Reference"
-                        className="w-full max-w-xs rounded-lg border"
-                      />
+                      <p className="text-sm text-gray-600 mb-2">
+                        {referenceImages.length} reference image{referenceImages.length > 1 ? 's' : ''} selected
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {referenceImageUrls.map((url, index) => (
+                          <div key={index} className="relative group">
+                            <img
+                              src={url}
+                              alt={`Reference ${index + 1}`}
+                              className="w-full h-32 object-cover rounded-lg border"
+                            />
+                            {/* Remove button */}
+                            <button
+                              type="button"
+                              onClick={() => removeReferenceImage(index)}
+                              className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-lg"
+                              title="Remove image"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                            {referenceImages[index]?.name.includes('reference-') && (
+                              <div className="absolute bottom-1 left-1 right-1">
+                                <p className="text-xs text-white bg-indigo-600 bg-opacity-80 px-2 py-1 rounded text-center">
+                                  ✨ Pre-loaded
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      {referenceImages.length > 1 && (
+                        <div className="mt-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              // Revoke all URLs to prevent memory leaks
+                              referenceImageUrls.forEach(url => URL.revokeObjectURL(url))
+                              setReferenceImages([])
+                              setReferenceImageUrls([])
+                              toast.success('All reference images cleared')
+                            }}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          >
+                            <X className="w-4 h-4 mr-1" />
+                            Clear All References
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -303,7 +472,7 @@ export default function FindPerson() {
               <div className="flex gap-4 justify-center mt-8">
                 <Button 
                   onClick={findMatches} 
-                  disabled={!referenceImage || folderImages.length === 0 || loading || !faceApiLoaded}
+                  disabled={!referenceImages.length || folderImages.length === 0 || loading || !faceApiLoaded}
                   className="px-8"
                 >
                   {loading ? (
@@ -344,7 +513,7 @@ export default function FindPerson() {
                         <span className="text-blue-700 font-medium">Processing Images...</span>
                       </div>
                       <div className="text-blue-600">
-                        {processedCount}/{folderImages.length} processed • {matches.filter(m => m.similarity >= 60).length} high-quality matches found
+                        {processedCount}/{folderImages.length} processed • {filteredMatches.length} matches found
                       </div>
                     </div>
                     <div className="mt-2 bg-blue-200 rounded-full h-2">
@@ -358,34 +527,32 @@ export default function FindPerson() {
               )}
               
               <h2 className="text-xl font-semibold">
-                High-Quality Matches ({matches.filter(m => m.similarity >= 60).length})
-                {loading && <span className="text-sm text-gray-500 ml-2">(Live Results - 60%+ similarity)</span>}
+                Found Matches ({filteredMatches.length})
+                {loading && <span className="text-sm text-gray-500 ml-2">(Live Results - 50%+ similarity)</span>}
               </h2>
               
-              {matches.filter(m => m.similarity >= 60).length === 0 ? (
+              {filteredMatches.length === 0 ? (
                 !loading && (
                   <Card>
                     <CardContent className="p-8 text-center">
                       <div className="text-gray-500">
                         <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                        <p className="text-lg font-medium mb-2">No high-quality matches found</p>
-                        <p>No matches found with 60% or higher similarity</p>
-                        {matches.length > 0 && (
-                          <p className="text-sm mt-2 text-blue-600">
-                            Found {matches.length} lower-quality matches (50-59% similarity)
-                          </p>
-                        )}
+                        <p className="text-lg font-medium mb-2">No matches found</p>
+                        <p>No matches found with 50% or higher similarity</p>
                       </div>
                     </CardContent>
                   </Card>
                 )
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {matches.filter(m => m.similarity >= 60).map((match, index) => (
+                  {filteredMatches.map((match, index) => (
                     <Card 
                       key={index} 
                       className="hover:shadow-lg transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4"
-                      onClick={() => setSelectedMatch(match)}
+                      onClick={() => {
+                        setCurrentImageIndex(index)
+                        setSelectedMatch(match)
+                      }}
                     >
                       <CardContent className="p-4">
                         <div className="space-y-3">
@@ -425,21 +592,61 @@ export default function FindPerson() {
               className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
               onClick={() => setSelectedMatch(null)}
             >
-              <div className="bg-white rounded-lg p-4 max-w-4xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+              <div className="bg-white rounded-lg p-4 max-w-4xl w-full max-h-[90vh] overflow-auto relative" onClick={e => e.stopPropagation()}>
+                {/* Header with navigation info */}
                 <div className="flex justify-between items-center mb-4">
                   <div>
                     <h3 className="text-lg font-medium">{selectedMatch.fileName}</h3>
-                    <p className="text-sm text-gray-600">Similarity: {selectedMatch.similarity}%</p>
+                    <div className="flex items-center gap-4 text-sm text-gray-600">
+                      <span>Similarity: {selectedMatch.similarity}%</span>
+                      <span>{currentImageIndex + 1} of {filteredMatches.length}</span>
+                    </div>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setSelectedMatch(null)}>
                     Close
                   </Button>
                 </div>
-                <img
-                  src={selectedMatch.imageUrl}
-                  alt={selectedMatch.fileName}
-                  className="w-full rounded-lg"
-                />
+                
+                {/* Image container with navigation */}
+                <div className="relative">
+                  <img
+                    src={selectedMatch.imageUrl}
+                    alt={selectedMatch.fileName}
+                    className="w-full rounded-lg"
+                  />
+                  
+                  {/* Navigation buttons */}
+                  {filteredMatches.length > 1 && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white"
+                        onClick={goToPrevious}
+                        disabled={currentImageIndex === 0}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white"
+                        onClick={goToNext}
+                        disabled={currentImageIndex === filteredMatches.length - 1}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+                
+                {/* Keyboard shortcuts info */}
+                {filteredMatches.length > 1 && (
+                  <div className="mt-4 text-center text-sm text-gray-500">
+                    Use arrow keys (← →) to navigate • Press Esc to close
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -452,10 +659,10 @@ export default function FindPerson() {
                 <div className="text-sm text-blue-800">
                   <p className="font-medium mb-2">How it works:</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>Upload a clear reference image containing the person's face</li>
+                    <li>Upload clear reference images containing the person's face</li>
                     <li>Select a folder containing images to search through</li>
-                    <li>The system will detect faces and compare them with the reference</li>
-                    <li>Results are ranked by similarity percentage</li>
+                    <li>The system will detect faces and compare them with all reference faces</li>
+                    <li>Results are ranked by the best similarity percentage from any reference</li>
                     <li>All processing happens locally in your browser</li>
                   </ul>
                 </div>

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Trash2, X, Download, Mail, Edit } from "lucide-react"
+import { Search, Trash2, X, Download, Mail, Edit, Scan } from "lucide-react"
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { supabase } from '@/lib/supabase'
@@ -451,6 +451,27 @@ The Photo Desk Team
     }
   }
 
+  const handleFacialRecognition = async (person: Person) => {
+    try {
+      // Store the person's images for facial recognition
+      const referenceData = {
+        images: person.image_urls,
+        email: person.email,
+        timestamp: Date.now()
+      }
+      
+      localStorage.setItem('facialRecognitionReference', JSON.stringify(referenceData))
+      
+      // Navigate to find-person page
+      window.open('/find-person', '_blank')
+      
+      toast.success('Reference images prepared for facial recognition')
+    } catch (error) {
+      console.error('Error preparing facial recognition:', error)
+      toast.error('Failed to prepare facial recognition')
+    }
+  }
+
   return (
     <>
       <ToastContainer />
@@ -551,11 +572,28 @@ The Photo Desk Team
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  onClick={() => handleFacialRecognition(person)}
+                                  className="bg-indigo-50 hover:bg-indigo-100 border-indigo-200 h-7 w-7"
+                                >
+                                  <Scan className="w-4 h-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Facial Recognition</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
                                   onClick={() => setEditModal({ isOpen: true, person })}
                                   className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200 h-7 w-7"
-                                >
+                          >
                                   <Edit className="w-4 h-4" />
-                                </Button>
+                          </Button>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p>Edit Record</p>
@@ -565,21 +603,21 @@ The Photo Desk Team
                           <TooltipProvider delayDuration={100}>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => handleDelete(person.id)}
-                                  className="h-7 w-7"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDelete(person.id)}
+                            className="h-7 w-7"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p>Delete Record</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
-                        </div>
+                           </div>
                         </div>
                       </div>
 

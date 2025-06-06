@@ -83,32 +83,60 @@ export default function Home() {
       const { count: todayCount, error: todayError } = await supabase
         .from('ref_images')
         .select('*', { count: 'exact', head: true })
-        .eq('date', today)
+        .gte('created_at', `${today}T00:00:00.000Z`)
+        .lt('created_at', `${today}T23:59:59.999Z`)
 
       if (todayError) throw todayError;
 
       // Get daily statistics for last 7 days using aggregation
       const last7Days = []
+      
+      // Create promises for all 7 days to run in parallel
+      const dayPromises = []
       for (let i = 0; i < 7; i++) {
         const date = new Date()
         date.setDate(date.getDate() - i)
-        const dateString = date.toISOString().split('T')[0]
+        // Use local date to match what users would enter in date inputs
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const dateString = `${year}-${month}-${day}`
         
-        const { count: dayCount, error: dayError } = await supabase
-          .from('ref_images')
-          .select('*', { count: 'exact', head: true })
-          .eq('date', dateString)
-
-        if (!dayError) {
-          last7Days.push({ date: dateString, count: dayCount || 0 })
-        }
+        dayPromises.push(
+          supabase
+            .from('ref_images')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', `${dateString}T00:00:00.000Z`)
+            .lt('created_at', `${dateString}T23:59:59.999Z`)
+            .then(({ count, error }) => {
+              if (error) {
+                console.error(`Error fetching count for ${dateString}:`, error)
+              }
+              return {
+                date: dateString,
+                count: error ? 0 : (count || 0),
+                dayIndex: i
+              }
+            })
+        )
       }
+
+      // Wait for all day queries to complete
+      const dayResults = await Promise.all(dayPromises)
+      
+      // Sort by date (most recent first) and ensure we have all 7 days
+      const sortedDays = dayResults
+        .sort((a, b) => a.dayIndex - b.dayIndex) // Sort by day index (0 = today, 6 = 6 days ago)
+        .map(({ date, count }) => ({ date, count }))
+
+      console.log('Daily statistics:', sortedDays)
+      console.log('Today date string:', sortedDays[0]?.date)
 
       setAnalytics({
         totalRecords: totalCount || 0,
         completedRecords: completedCount || 0,
         pendingRecords: pendingCount || 0,
-        dailyStats: last7Days
+        dailyStats: sortedDays
       });
 
       // Show total count in console

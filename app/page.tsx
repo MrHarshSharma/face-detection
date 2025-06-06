@@ -6,6 +6,7 @@ import Link from "next/link"
 import { UserPlus, Users, CheckCircle, XCircle, BarChart3 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { toast, ToastContainer } from "react-toastify"
 
 interface DailyStats {
   date: string;
@@ -30,24 +31,49 @@ export default function Home() {
 
   useEffect(() => {
     fetchAnalytics();
+    getTotalRecordsCount();
   }, []);
+  const getTotalRecordsCount = async () => {
+    try {
+      const { count, error } = await supabase
+        .from('ref_images')
+        .select('*', { count: 'exact', head: true })
+
+      if (error) throw error
+
+      // console.log(`Total records in database: ${count}`)
+      // if (count !== null) {
+      //   toast.info(`Total records in database: ${count}`)
+      // }
+    } catch (error) {
+      console.error('Error getting total count:', error)
+      toast.error('Error getting total record count')
+    }
+  }
 
   const fetchAnalytics = async () => {
     try {
       setLoading(true);
 
-      // Get all records
+      // Get exact total count from database
+      const { count: totalCount, error: countError } = await supabase
+        .from('ref_images')
+        .select('*', { count: 'exact', head: true })
+
+      if (countError) throw countError;
+
+      // Get records for other analytics (limited to 2000 for performance)
       const { data: records, error } = await supabase
         .from('ref_images')
         .select('*')
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .limit(2000);
 
       if (error) throw error;
 
-      // Calculate statistics
-      const totalRecords = records?.length || 0;
+      // Calculate statistics from fetched records
       const completedRecords = records?.filter(r => r.completed).length || 0;
-      const pendingRecords = totalRecords - completedRecords;
+      const pendingRecords = (records?.length || 0) - completedRecords;
 
       // Calculate daily statistics
       const dailyStats = records?.reduce((acc: { [key: string]: number }, record) => {
@@ -62,14 +88,21 @@ export default function Home() {
         .slice(0, 7); // Last 7 days
 
       setAnalytics({
-        totalRecords,
+        totalRecords: totalCount || 0, // Use exact count from database
         completedRecords,
         pendingRecords,
         dailyStats: formattedDailyStats
       });
 
+      // Show total count in console and toast
+      console.log(`Total records in database: ${totalCount}`)
+      if (totalCount !== null) {
+        toast.info(`Total records in database: ${totalCount}`)
+      }
+
     } catch (error) {
       console.error('Error fetching analytics:', error);
+      toast.error('Error loading analytics data');
     } finally {
       setLoading(false);
     }
@@ -78,6 +111,7 @@ export default function Home() {
   return (
     <div className="min-h-[80vh] space-y-8 py-8">
       {/* Analytics Section */}
+      <ToastContainer />
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Card className="p-6 bg-white">
           <div className="flex items-center gap-4">

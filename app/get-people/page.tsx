@@ -61,7 +61,7 @@ interface EditModalProps {
 }
 
 export default function GetPeople() {
-  const [people, setPeople] = useState<Person[]>([])
+  const [allPeople, setAllPeople] = useState<Person[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null)
   const [filters, setFilters] = useState<Filters>({
@@ -81,9 +81,44 @@ export default function GetPeople() {
     person: null,
   })
 
+  // Computed filtered people based on current filters
+  const people = allPeople.filter(person => {
+    // Email filter
+    if (filters.email.trim() && !person.email.toLowerCase().includes(filters.email.toLowerCase())) {
+      return false
+    }
+    
+    // Date filter
+    if (filters.date && person.date !== filters.date) {
+      return false
+    }
+    
+    // Status filter
+    if (filters.status !== 'all') {
+      const isCompleted = filters.status === 'completed'
+      if (person.completed !== isCompleted) {
+        return false
+      }
+    }
+    
+    // Time range filter
+    if (filters.startTime && person.time < filters.startTime) {
+      return false
+    }
+    
+    if (filters.endTime && person.time > filters.endTime) {
+      return false
+    }
+    
+    return true
+  })
+
   useEffect(() => {
     fetchPeople()
+   
   }, [])
+
+  
 
   const fetchPeople = async () => {
     try {
@@ -92,10 +127,12 @@ export default function GetPeople() {
         .from('ref_images')
         .select('*')
         .order('created_at', { ascending: false })
+        .limit(2000)
 
       if (error) throw error
 
-      setPeople(data || [])
+      setAllPeople(data || [])
+      toast.success(`Loaded ${data?.length || 0} records out of total available`)
     } catch (error) {
       console.error('Error fetching people:', error)
       toast.error('Error loading data')
@@ -104,50 +141,9 @@ export default function GetPeople() {
     }
   }
 
-  const handleSearch = async () => {
-    try {
-      setLoading(true)
-      let query = supabase
-        .from('ref_images')
-        .select('*')
-
-      // Apply email filter
-      if (filters.email.trim()) {
-        query = query.ilike('email', `%${filters.email}%`)
-      }
-
-      // Apply date filter
-      if (filters.date) {
-        query = query.eq('date', filters.date)
-      }
-
-      // Apply status filter
-      if (filters.status !== 'all') {
-        query = query.eq('completed', filters.status === 'completed')
-      }
-
-      // Apply time range filter
-      if (filters.startTime && filters.endTime) {
-        query = query
-          .gte('time', filters.startTime)
-          .lte('time', filters.endTime)
-      } else if (filters.startTime) {
-        query = query.gte('time', filters.startTime)
-      } else if (filters.endTime) {
-        query = query.lte('time', filters.endTime)
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      setPeople(data || [])
-    } catch (error) {
-      console.error('Error searching:', error)
-      toast.error('Error searching data')
-    } finally {
-      setLoading(false)
-    }
+  const handleSearch = () => {
+    // No need to fetch from database - filtering is done automatically via computed people array
+    // This function can be removed or kept for future enhancements
   }
 
   const clearFilters = () => {
@@ -158,14 +154,14 @@ export default function GetPeople() {
       endTime: "",
       status: 'all'
     })
-    fetchPeople()
+    // No need to fetch again - the computed people array will update automatically
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this record?')) return
 
     try {
-      const person = people.find(p => p.id === id)
+      const person = allPeople.find(p => p.id === id)
       if (!person) return
 
       // Delete images from storage
@@ -189,7 +185,7 @@ export default function GetPeople() {
       if (dbError) throw dbError
 
       toast.success('Record deleted successfully')
-      setPeople(people.filter(p => p.id !== id))
+      setAllPeople(allPeople.filter(p => p.id !== id))
     } catch (error) {
       console.error('Error deleting record:', error)
       toast.error('Error deleting record')
@@ -208,7 +204,7 @@ export default function GetPeople() {
       if (error) throw error
 
       // Update local state
-      setPeople(people.map(person => 
+      setAllPeople(allPeople.map(person => 
         person.id === id 
           ? { ...person, completed: !currentStatus }
           : person
@@ -298,7 +294,7 @@ export default function GetPeople() {
       toast.info('Uploading file...')
 
       // Find the person to update
-      const person = people.find(p => p.email === email)
+      const person = allPeople.find(p => p.email === email)
       if (!person) {
         throw new Error('Person not found')
       }
@@ -359,7 +355,7 @@ The Photo Desk Team
       }
 
       // Update local state
-      setPeople(people.map(p => 
+      setAllPeople(allPeople.map(p => 
         p.id === person.id ? { ...p, completed: true } : p
       ))
 
@@ -380,7 +376,7 @@ The Photo Desk Team
   }) => {
     try {
       // First handle image updates
-      const person = people.find(p => p.id === id)
+      const person = allPeople.find(p => p.id === id)
       if (!person) throw new Error('Person not found')
 
       // Delete selected images from storage
@@ -428,7 +424,7 @@ The Photo Desk Team
       if (error) throw error
 
       // Update local state
-      setPeople(people.map(p => 
+      setAllPeople(allPeople.map(p => 
         p.id === id 
           ? {
               ...p,

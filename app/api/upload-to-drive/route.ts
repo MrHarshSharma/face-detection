@@ -13,7 +13,8 @@ import { Readable } from 'stream';
 
     const drive = google.drive({ version: 'v3', auth });
 
-export async function POST(request: Request) {
+export async function POST(request: any) {
+  console.log("request",request)
   try {
     const formData = await request.formData();
     console.log('Received form data keys:', Array.from(formData.keys()));

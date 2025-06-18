@@ -4,15 +4,67 @@ import { useState, useRef, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Upload, User, FolderOpen, AlertCircle, ChevronLeft, ChevronRight, X } from "lucide-react"
+import { Search, Upload, User, FolderOpen, AlertCircle, ChevronLeft, ChevronRight, X, Mail } from "lucide-react"
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import JSZip from 'jszip'
 
 interface MatchResult {
   file: File
   imageUrl: string
   similarity: number
   fileName: string
+}
+
+// JWT creation for Google Service Account authentication
+const createJWT = async (): Promise<string> => {
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT'
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  const payload = {
+    iss: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_EMAIL,
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now
+  }
+
+  const headerBase64 = btoa(JSON.stringify(header))
+  const payloadBase64 = btoa(JSON.stringify(payload))
+  const unsignedToken = `${headerBase64}.${payloadBase64}`
+
+  // Note: This requires the private key to be accessible client-side
+  // In production, this should be done server-side for security
+  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  
+  if (!privateKey) {
+    throw new Error('Google private key not found')
+  }
+
+  // Import the private key
+  const keyData = await crypto.subtle.importKey(
+    'pkcs8',
+    new TextEncoder().encode(privateKey),
+    {
+      name: 'RSASSA-PKCS1-v1_5',
+      hash: 'SHA-256'
+    },
+    false,
+    ['sign']
+  )
+
+  // Sign the token
+  const signature = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5',
+    keyData,
+    new TextEncoder().encode(unsignedToken)
+  )
+
+  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+  return `${unsignedToken}.${signatureBase64}`
 }
 
 export default function FindPerson() {
@@ -25,6 +77,7 @@ export default function FindPerson() {
   const [folderName, setFolderName] = useState<string>("")
   const [loading, setLoading] = useState(false)
   const [matches, setMatches] = useState<MatchResult[]>([])
+  const [selectedMatches, setSelectedMatches] = useState<Set<number>>(new Set())
   const [faceApiLoaded, setFaceApiLoaded] = useState(false)
   const [selectedMatch, setSelectedMatch] = useState<MatchResult | null>(null)
   const [processedCount, setProcessedCount] = useState(0)
@@ -332,6 +385,7 @@ export default function FindPerson() {
     setFolderImages([])
     setFolderName("")
     setMatches([])
+    setSelectedMatches(new Set())
     setSelectedMatch(null)
     setProcessedCount(0)
     setProcessingStarted(false)
@@ -339,6 +393,140 @@ export default function FindPerson() {
   }
 
   const filteredMatches = matches.filter(m => m.similarity >= 50)
+
+  const handleMatchSelection = (index: number, checked: boolean) => {
+    const newSelected = new Set(selectedMatches)
+    if (checked) {
+      newSelected.add(index)
+    } else {
+      newSelected.delete(index)
+    }
+    setSelectedMatches(newSelected)
+  }
+
+  const handleSelectAll = () => {
+    if (selectedMatches.size === filteredMatches.length) {
+      // Deselect all
+      setSelectedMatches(new Set())
+    } else {
+      // Select all
+      const allIndices = new Set(filteredMatches.map((_, index) => index))
+      setSelectedMatches(allIndices)
+    }
+  }
+
+  const handleSendEmail = async () => {
+    if (selectedMatches.size === 0) {
+      toast.warning('Please select at least one image to send via email')
+      return
+    }
+
+    if (!referenceEmail) {
+      toast.error('No email address found from reference data')
+      return
+    }
+
+    try {
+      toast.info('Creating ZIP file with selected images...')
+
+      // Create ZIP file with selected images
+      const zip = new JSZip()
+      const folderName = `facial_recognition_matches_${new Date().toISOString().split('T')[0]}`
+      const folder = zip.folder(folderName)
+
+      if (!folder) {
+        throw new Error('Could not create folder in ZIP')
+      }
+
+      // Add selected images to ZIP
+      const selectedImages = Array.from(selectedMatches).map(index => filteredMatches[index])
+      
+      for (let i = 0; i < selectedImages.length; i++) {
+        const match = selectedImages[i]
+        try {
+          const response = await fetch(match.imageUrl)
+          const blob = await response.blob()
+          folder.file(`match_${i + 1}_${match.similarity}%_${match.fileName}`, blob)
+        } catch (error) {
+          console.error(`Error adding image ${match.fileName} to ZIP:`, error)
+        }
+      }
+
+      // Generate ZIP file
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const zipFile = new File([zipBlob], `${folderName}.zip`, { type: 'application/zip' })
+
+      toast.info('Uploading to Google Drive...')
+
+      // Upload to Google Drive using existing API route
+      const uploadFormData = new FormData()
+      uploadFormData.append('file', zipFile)
+      uploadFormData.append('email', referenceEmail)
+      
+      const uploadResponse = await fetch('/api/upload-to-drive', {
+        method: 'POST',
+        body: uploadFormData,
+      })
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text()
+        console.error('Upload failed:', {
+          status: uploadResponse.status,
+          statusText: uploadResponse.statusText,
+          errorText: errorText
+        })
+        
+        let errorData
+        try {
+          errorData = JSON.parse(errorText)
+        } catch {
+          errorData = { error: errorText }
+        }
+        
+        throw new Error(errorData.error || 'Failed to upload file')
+      }
+
+      const { fileUrl } = await uploadResponse.json()
+
+      // Open Gmail compose window with drive link
+      const subject = encodeURIComponent('Facial Recognition Search Results')
+      const body = encodeURIComponent(`Dear Esteemed Visitor,
+
+We sincerely thank you and deeply appreciate your patience and understanding.
+
+Please find your special moment with the relic. This link will be accessible through Google Drive and will expire in 7 days.
+
+Visitor Details:
+- Date: ${referenceDate ? new Date(referenceDate).toLocaleDateString() : 'Not available'}
+- Time: ${referenceTime || 'Not available'}
+- Images: ${selectedMatches.size}
+- Download Link: ${fileUrl}
+
+Wishing you blessings and joy,
+The Photo Desk Team
+`)
+
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${referenceEmail}&su=${subject}&body=${body}`
+      
+      // Open as popup window with small size
+      const width = 600
+      const height = 700
+      const left = (window.screen.width - width) / 2
+      const top = (window.screen.height - height) / 2
+      
+      window.open(
+        gmailUrl,
+        'EmailPopup',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
+      )
+
+      toast.success(`ZIP file uploaded to Google Drive and email window opened for ${selectedMatches.size} selected images`)
+      
+    } catch (error) {
+      console.error('Error sending email:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to send email')
+    }
+  }
 
   const navigateToImage = (index: number) => {
     if (index >= 0 && index < filteredMatches.length) {
@@ -461,7 +649,7 @@ export default function FindPerson() {
                           </div>
                         ))}
                       </div>
-                      {referenceImages.length > 1 && (
+                      {referenceImages.length > 0 && (
                         <div className="mt-3">
                            {(referenceDate || referenceTime) && (
                     <div className="bg-gray-50 p-3 rounded-lg space-y-1">
@@ -538,7 +726,7 @@ export default function FindPerson() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-4 justify-center mt-8">
+              <div className="flex gap-4 justify-end mt-8">
                 <Button 
                   onClick={findMatches} 
                   disabled={!referenceImages.length || folderImages.length === 0 || loading || !faceApiLoaded}
@@ -600,6 +788,25 @@ export default function FindPerson() {
                 {loading && <span className="text-sm text-gray-500 ml-2">(Live Results - 50%+ similarity)</span>}
               </h2>
               
+              {/* Selection Controls */}
+              {filteredMatches.length > 0 && !loading && (
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSelectAll}
+                      className="px-4"
+                    >
+                      {selectedMatches.size === filteredMatches.length ? 'Deselect All' : 'Select All'}
+                    </Button>
+                    <span className="text-sm text-gray-600">
+                      {selectedMatches.size} of {filteredMatches.length} selected
+                    </span>
+                  </div>
+                </div>
+              )}
+              
               {filteredMatches.length === 0 ? (
                 !loading && (
                   <Card>
@@ -617,34 +824,47 @@ export default function FindPerson() {
                   {filteredMatches.map((match, index) => (
                     <Card 
                       key={index} 
-                      className="hover:shadow-lg transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4"
-                      onClick={() => {
-                        setCurrentImageIndex(index)
-                        setSelectedMatch(match)
-                      }}
+                      className={`hover:shadow-lg transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4 ${
+                        selectedMatches.has(index) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                      }`}
                     >
                       <CardContent className="p-4">
                         <div className="space-y-3">
+                          {/* Checkbox */}
+                          <div className="flex items-center justify-between">
+                            <input
+                              type="checkbox"
+                              checked={selectedMatches.has(index)}
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                handleMatchSelection(index, e.target.checked)
+                              }}
+                              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                            />
+                            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              match.similarity >= 80 
+                                ? 'bg-green-100 text-green-700' 
+                                : match.similarity >= 70
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {match.similarity}% match
+                            </div>
+                          </div>
+                          
                           <img
                             src={match.imageUrl}
                             alt={match.fileName}
                             className="w-full h-48 object-cover rounded-lg"
+                            onClick={() => {
+                              setCurrentImageIndex(index)
+                              setSelectedMatch(match)
+                            }}
                           />
                           <div>
                             <p className="text-sm font-medium truncate" title={match.fileName}>
                               {match.fileName}
                             </p>
-                            <div className="flex items-center justify-between mt-2">
-                              <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                match.similarity >= 80 
-                                  ? 'bg-green-100 text-green-700' 
-                                  : match.similarity >= 70
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {match.similarity}% match
-                              </div>
-                            </div>
                           </div>
                         </div>
                       </CardContent>
@@ -652,6 +872,20 @@ export default function FindPerson() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Send Email Button */}
+          {filteredMatches.length > 0 && !loading && (
+            <div className="mt-6 flex justify-end">
+              <Button
+                onClick={handleSendEmail}
+                disabled={selectedMatches.size === 0}
+                className="px-6 py-2"
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Send Email {selectedMatches.size > 0 && `(${selectedMatches.size})`}
+              </Button>
             </div>
           )}
 
@@ -664,11 +898,23 @@ export default function FindPerson() {
               <div className="bg-white rounded-lg p-4 max-w-4xl w-full max-h-[90vh] overflow-auto relative" onClick={e => e.stopPropagation()}>
                 {/* Header with navigation info */}
                 <div className="flex justify-between items-center mb-4">
-                  <div>
-                    <h3 className="text-lg font-medium">{selectedMatch.fileName}</h3>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span>Similarity: {selectedMatch.similarity}%</span>
-                      <span>{currentImageIndex + 1} of {filteredMatches.length}</span>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <h3 className="text-lg font-medium">{selectedMatch.fileName}</h3>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <span>Similarity: {selectedMatch.similarity}%</span>
+                        <span>{currentImageIndex + 1} of {filteredMatches.length}</span>
+                      </div>
+                    </div>
+                    {/* Checkbox in modal */}
+                    <div className="flex items-center gap-2 ml-5">
+                      <input
+                        type="checkbox"
+                        checked={selectedMatches.has(currentImageIndex)}
+                        onChange={(e) => handleMatchSelection(currentImageIndex, e.target.checked)}
+                        className="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                      />
+                      <label className="text-sm text-gray-600">Select</label>
                     </div>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setSelectedMatch(null)}>
@@ -713,7 +959,7 @@ export default function FindPerson() {
                 {/* Keyboard shortcuts info */}
                 {filteredMatches.length > 1 && (
                   <div className="mt-4 text-center text-sm text-gray-500">
-                    Use arrow keys (← →) to navigate • Press Esc to close
+                    Use arrow keys (← →) to navigate • Press Esc to close • Use checkbox to select/deselect
                   </div>
                 )}
               </div>

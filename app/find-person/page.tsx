@@ -17,55 +17,8 @@ interface MatchResult {
 }
 
 // JWT creation for Google Service Account authentication
-const createJWT = async (): Promise<string> => {
-  const header = {
-    alg: 'RS256',
-    typ: 'JWT'
-  }
-
-  const now = Math.floor(Date.now() / 1000)
-  const payload = {
-    iss: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_EMAIL,
-    scope: 'https://www.googleapis.com/auth/drive.file',
-    aud: 'https://oauth2.googleapis.com/token',
-    exp: now + 3600,
-    iat: now
-  }
-
-  const headerBase64 = btoa(JSON.stringify(header))
-  const payloadBase64 = btoa(JSON.stringify(payload))
-  const unsignedToken = `${headerBase64}.${payloadBase64}`
-
-  // Note: This requires the private key to be accessible client-side
-  // In production, this should be done server-side for security
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-  
-  if (!privateKey) {
-    throw new Error('Google private key not found')
-  }
-
-  // Import the private key
-  const keyData = await crypto.subtle.importKey(
-    'pkcs8',
-    new TextEncoder().encode(privateKey),
-    {
-      name: 'RSASSA-PKCS1-v1_5',
-      hash: 'SHA-256'
-    },
-    false,
-    ['sign']
-  )
-
-  // Sign the token
-  const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    keyData,
-    new TextEncoder().encode(unsignedToken)
-  )
-
-  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-  return `${unsignedToken}.${signatureBase64}`
-}
+const AdminEmail = process.env.ADMIN_EMAIL
+const AdminPassword = process.env.ADMIN_PASSWORD
 
 export default function FindPerson() {
   // Authentication states
@@ -102,7 +55,7 @@ export default function FindPerson() {
         const savedCredentials = localStorage.getItem('findPersonCredentials')
         if (savedCredentials) {
           const { email, password } = JSON.parse(savedCredentials)
-          if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASSWORD) {
+          if (email === "exposition@gmail.com" && password === "exposition") {
             setLoginEmail(email)
             setLoginPassword(password)
             setIsAuthenticated(true)
@@ -617,7 +570,7 @@ The Photo Desk Team
 
     try {
       // Simulate authentication - replace with your actual authentication logic
-      if(loginEmail === "admin@gmail.com" && loginPassword === "admin") {
+      if(loginEmail === "exposition@gmail.com" && loginPassword === "exposition") {
         
       await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
       

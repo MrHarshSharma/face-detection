@@ -83,6 +83,7 @@ export default function FindPerson() {
   const [processedCount, setProcessedCount] = useState(0)
   const [processingStarted, setProcessingStarted] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [sendingEmail, setSendingEmail] = useState(false)
   
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -426,8 +427,10 @@ export default function FindPerson() {
       return
     }
 
+    setSendingEmail(true)
+
     try {
-      toast.info('Creating ZIP file with selected images...')
+      // toast.info('Creating ZIP file with selected images...')
 
       // Create ZIP file with selected images
       const zip = new JSZip()
@@ -446,7 +449,7 @@ export default function FindPerson() {
         try {
           const response = await fetch(match.imageUrl)
           const blob = await response.blob()
-          folder.file(`match_${i + 1}_${match.similarity}%_${match.fileName}`, blob)
+          folder.file(`image_${i + 1}_${match.fileName}`, blob)
         } catch (error) {
           console.error(`Error adding image ${match.fileName} to ZIP:`, error)
         }
@@ -489,7 +492,7 @@ export default function FindPerson() {
       const { fileUrl } = await uploadResponse.json()
 
       // Open Gmail compose window with drive link
-      const subject = encodeURIComponent('Facial Recognition Search Results')
+      const subject = encodeURIComponent('Special moment with the relic')
       const body = encodeURIComponent(`Dear Esteemed Visitor,
 
 We sincerely thank you and deeply appreciate your patience and understanding.
@@ -525,6 +528,8 @@ The Photo Desk Team
     } catch (error) {
       console.error('Error sending email:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to send email')
+    } finally {
+      setSendingEmail(false)
     }
   }
 
@@ -880,11 +885,20 @@ The Photo Desk Team
             <div className="mt-6 flex justify-end">
               <Button
                 onClick={handleSendEmail}
-                disabled={selectedMatches.size === 0}
+                disabled={selectedMatches.size === 0 || sendingEmail}
                 className="px-6 py-2"
               >
-                <Mail className="w-4 h-4 mr-2" />
-                Send Email {selectedMatches.size > 0 && `(${selectedMatches.size})`}
+                {sendingEmail ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Uploading...</span>
+                  </div>
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4 mr-2" />
+                    Send Email {selectedMatches.size > 0 && `(${selectedMatches.size})`}
+                  </>
+                )}
               </Button>
             </div>
           )}

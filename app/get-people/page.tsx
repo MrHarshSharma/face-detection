@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, Trash2, X, Download, Mail, Edit, Scan, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Trash2, X, Download, Mail, Edit, Scan, ChevronLeft, ChevronRight, Users, Filter, Clock, Calendar, CheckCircle2, AlertCircle, ImageIcon, Eye } from "lucide-react"
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { supabase } from '@/lib/supabase'
@@ -21,6 +21,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import Footer from "@/components/Footer"
 
 interface Person {
   id: string
@@ -150,6 +151,7 @@ export default function GetPeople() {
 
   const handleSearch = () => {
     setCurrentPage(1) // Reset to first page when searching
+    fetchPeople() // Explicitly trigger fetch with current filters
   }
 
   const clearFilters = () => {
@@ -161,6 +163,18 @@ export default function GetPeople() {
       status: 'all'
     })
     setCurrentPage(1) // Reset to first page when clearing filters
+    // Trigger fetch after clearing filters
+    setTimeout(() => {
+      fetchPeople()
+    }, 0)
+  }
+
+  // Add a function to handle Enter key press in search fields
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleSearch()
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -397,7 +411,13 @@ The Photo Desk Team
       // Upload new images
       const newImageUrls: string[] = []
       for (const file of data.newImages) {
-        const fileName = `${Date.now()}_${file.name}`
+        // Sanitize filename - remove spaces and special characters, keep only alphanumeric, dots, and hyphens
+        const sanitizedFileName = file.name
+          .replace(/[^a-zA-Z0-9.-]/g, '_') // Replace invalid characters with underscore
+          .replace(/_{2,}/g, '_') // Replace multiple underscores with single underscore
+          .replace(/^_+|_+$/g, '') // Remove leading/trailing underscores
+        
+        const fileName = `${Date.now()}_${sanitizedFileName}`
         const { error: uploadError, data: uploadData } = await supabase.storage
           .from('images')
           .upload(fileName, file)
@@ -480,200 +500,330 @@ The Photo Desk Team
   }
 
   return (
-    <>
+    <div className="min-h-[80vh] ">
       <ToastContainer />
-      <Card className="w-full shadow-none border-none p-0">
-        <CardContent className="p-6">
-          <div className="space-y-6">
-            {/* Filters Section - Make it sticky */}
-            <div className="sticky top-16 bg-white z-40 -mx-6 px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <Input
-                  type="email"
-                  placeholder="Search by email"
-                  value={filters.email}
-                  onChange={(e) => setFilters({ ...filters, email: e.target.value })}
-                  className="w-300"
-                />
-                <Input
-                  type="date"
-                  value={filters.date}
-                  onChange={(e) => setFilters({ ...filters, date: e.target.value })}
-                  className="w-40"
-                />
-                <select
-                  value={filters.status}
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value as 'all' | 'completed' | 'pending' })}
-                  className="h-10 rounded-md border border-input bg-background px-3 py-2 w-300"
-                >
-                  <option value="all">All Status</option>
-                  <option value="completed">Completed</option>
-                  <option value="pending">Pending</option>
-                </select>
-                <div className="flex items-center gap-2 ml-auto">
-                  <Button onClick={handleSearch} className="px-4">
-                    <Search className="w-4 h-4 mr-2" />
-                    Search
-                  </Button>
-                  <Button 
-                    onClick={clearFilters}
-                    variant="outline"
-                    className="px-4"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Clear
-                  </Button>
-                </div>
-              </div>
-            </div>
+      
+      <div className="max-w-7xl mx-auto ">
+        
 
-            {/* Results Section */}
-            <div className="pt-4"> {/* Add padding top to prevent content from jumping */}
-              {loading ? (
-                <div className="text-center py-4">Loading...</div>
-              ) : people.length === 0 ? (
-                <div className="text-center py-4">No records found</div>
-              ) : (
-                <>
-                  {/* Pagination Info and Controls - Top */}
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-sm text-gray-600">
-                      Showing {startIndex} to {endIndex} of {totalCount} records
-                    </div>
-                    <PaginationControls 
-                      currentPage={currentPage}
-                      totalPages={totalPages}
-                      onPageChange={setCurrentPage}
+        <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+          <CardContent className="">
+            <div className="space-y-8">
+              {/* Filters Section */}
+              <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-xl p-6 border border-blue-100">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
+                    <Filter className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900">Search & Filter</h3>
+                    <p className="text-sm text-gray-500">Find specific records using various filters</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                      <Mail className="w-4 h-4 text-blue-500" />
+                      Email Address
+                    </label>
+                    <Input
+                      type="email"
+                      placeholder="Search by email"
+                      value={filters.email}
+                      onChange={(e) => setFilters({ ...filters, email: e.target.value })}
+                      className="h-11 border-2 border-gray-200 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-300"
+                      onKeyDown={handleKeyPress}
                     />
                   </div>
 
-                  <div className="grid grid-cols-4 gap-4">
-                    {people.map((person) => (
-                      <Card 
-                        key={person.id} 
-                        className={`p-4 w-full h-full ${
-                          person.completed ? 'bg-green-50' : ''
-                        }`}
-                      >
-                        <div className="flex justify-between items-start pb-2">
-                          
-                          <div className="flex gap-2 w-full pb-4 ">
-                          <div className="flex gap-2 ml-auto">
-                            <TooltipProvider delayDuration={100}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleFacialRecognition(person)}
-                                    className="bg-indigo-50 hover:bg-indigo-100 border-indigo-200 h-7 w-7"
-                                  >
-                                    <Scan className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Facial Recognition</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                            <TooltipProvider delayDuration={100}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                                    onClick={() => setEditModal({ isOpen: true, person })}
-                                    className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200 h-7 w-7"
-                            >
-                                    <Edit className="w-4 h-4" />
-                            </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Edit Record</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <TooltipProvider delayDuration={100}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleDelete(person.id)}
-                              className="h-7 w-7"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>Delete Record</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                           </div>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h3 className="font-medium">{person.email}</h3>
-                            <p className="text-sm text-gray-500">
-                              Date: {new Date(person.date).toLocaleDateString()}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              Time: {person.time}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        {/* Image Grid */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
-                          {person.image_urls.map((url, index) => (
-                            <img
-                              key={index}
-                              src={url}
-                              alt={`Reference ${index + 1}`}
-                              className="w-10 h-10 object-cover rounded-lg cursor-pointer border border-gray-300"
-                              onClick={() => setSelectedPerson(person)}
-                            />
-                          ))}
-                        </div>
-                      </Card>
-                    ))}
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                      <Calendar className="w-4 h-4 text-purple-500" />
+                      Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={filters.date}
+                      onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+                      className="h-11 border-2 border-gray-200 focus:border-purple-500 focus:ring-purple-500/20 transition-all duration-300"
+                      onKeyDown={handleKeyPress}
+                    />
                   </div>
 
-                  {/* Pagination Controls - Bottom */}
-                  {totalPages > 1 && (
-                    <div className="flex justify-center mt-6">
-                      <PaginationControls 
-                        currentPage={currentPage}
-                        totalPages={totalPages}
-                        onPageChange={setCurrentPage}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      Status
+                    </label>
+                    <select
+                      value={filters.status}
+                      onChange={(e) => setFilters({ ...filters, status: e.target.value as 'all' | 'completed' | 'pending' })}
+                      className="h-11 rounded-md border-2 border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-emerald-500/20 transition-all duration-300"
+                      onKeyDown={handleKeyPress}
+                    >
+                      <option value="all">All Status</option>
+                      <option value="completed">Completed</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
 
-      {/* Image Modal */}
+                  
+                  <div className="flex items-end gap-2 ml-auto ">
+                    <Button 
+                      onClick={handleSearch} 
+                      className="h-11 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                    >
+                      <Search className="w-4 h-4 mr-2" />
+                      Search
+                    </Button>
+                    <Button 
+                      onClick={clearFilters}
+                      variant="outline"
+                      className="h-11 px-6 border-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50 transition-all duration-300"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Clear
+                    </Button>
+                  </div>
+
+                 
+                </div>
+              </div>
+
+              {/* Results Section */}
+              <div className="space-y-6">
+                {loading ? (
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p className="text-lg font-medium text-gray-600">Loading records...</p>
+                  </div>
+                ) : people.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <div className="w-20 h-20 bg-gradient-to-r from-gray-300 to-gray-400 rounded-full flex items-center justify-center mb-4">
+                      <Users className="w-10 h-10 text-white" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-700 mb-2">No records found</h3>
+                    <p className="text-gray-500">Try adjusting your search filters</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Stats Bar */}
+                    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl p-6 mb-8 border border-emerald-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center">
+                            <CheckCircle2 className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">
+                              Showing <span className="font-semibold text-emerald-700">{startIndex}</span> to <span className="font-semibold text-emerald-700">{endIndex}</span> of <span className="font-semibold text-emerald-700">{totalCount}</span> records
+                            </p>
+                          </div>
+                        </div>
+                        <PaginationControls 
+                          currentPage={currentPage}
+                          totalPages={totalPages}
+                          onPageChange={setCurrentPage}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                      {people.map((person) => (
+                        <Card 
+                          key={person.id} 
+                          className={`group relative overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border-0 ${
+                            person.completed 
+                              ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-200' 
+                              : 'bg-gradient-to-br from-white to-gray-50 border-2 border-gray-200 hover:border-blue-300'
+                          }`}
+                        >
+                          <CardContent className="p-6">
+                            {/* Status Badge */}
+                            <div className="absolute top-4 right-4">
+                              {person.completed ? (
+                                <div className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-semibold">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Completed
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1 bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-semibold">
+                                  <Clock className="w-3 h-3" />
+                                  Pending
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Person Info */}
+                            <div className="mb-4 pt-8">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Mail className="w-4 h-4 text-blue-500" />
+                                <h3 className="font-semibold text-gray-900 truncate">{person.email}</h3>
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Calendar className="w-3 h-3 text-purple-500" />
+                                  {new Date(person.date).toLocaleDateString()}
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Clock className="w-3 h-3 text-orange-500" />
+                                  {person.time}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Image Preview */}
+                            <div className="mb-4">
+                              <div className="flex items-center gap-2 mb-3">
+                                <ImageIcon className="w-4 h-4 text-indigo-500" />
+                                <span className="text-sm font-medium text-gray-700">
+                                  {person.image_urls.length} image{person.image_urls.length > 1 ? 's' : ''}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-4 gap-2">
+                                {person.image_urls.slice(0, 4).map((url, index) => (
+                                  <div key={index} className="relative group/img">
+                                    <img
+                                      src={url}
+                                      alt={`Reference ${index + 1}`}
+                                      className="w-full h-12 object-cover rounded-lg cursor-pointer border-2 border-white shadow-sm hover:shadow-md transition-all duration-300 group-hover/img:scale-105"
+                                      onClick={() => setSelectedPerson(person)}
+                                    />
+                                    {index === 3 && person.image_urls.length > 4 && (
+                                      <div 
+                                        className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center cursor-pointer"
+                                        onClick={() => setSelectedPerson(person)}
+                                      >
+                                        <span className="text-white text-xs font-bold">+{person.image_urls.length - 4}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="grid grid-cols-3 gap-2">
+                              <TooltipProvider delayDuration={100}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleFacialRecognition(person)}
+                                      className="h-9 bg-gradient-to-r from-indigo-50 to-purple-50 hover:from-indigo-100 hover:to-purple-100 border-indigo-200 text-indigo-700 hover:text-indigo-800 transition-all duration-300"
+                                    >
+                                      <Scan className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Facial Recognition</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider delayDuration={100}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setEditModal({ isOpen: true, person })}
+                                      className="h-9 bg-gradient-to-r from-yellow-50 to-orange-50 hover:from-yellow-100 hover:to-orange-100 border-yellow-200 text-yellow-700 hover:text-yellow-800 transition-all duration-300"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Edit Record</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider delayDuration={100}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleDelete(person.id)}
+                                      className="h-9 bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 border-red-200 text-red-700 hover:text-red-800 transition-all duration-300"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Delete Record</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Bottom Pagination */}
+                    {totalPages > 1 && (
+                      <div className="flex justify-end mt-8 pt-8">
+                        <div className="bg-white/80 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-gray-200">
+                          <PaginationControls 
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPageChange={setCurrentPage}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Enhanced Image Modal */}
       {selectedPerson && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedPerson(null)}
         >
-          <div className="bg-white rounded-lg p-4 max-w-4xl w-full" onClick={e => e.stopPropagation()}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto max-h-[80vh]">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 max-w-6xl w-full shadow-2xl border border-white/20" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                  <Eye className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">{selectedPerson.email}</h3>
+                  <p className="text-sm text-gray-500">{selectedPerson.image_urls.length} images</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedPerson(null)}
+                className="rounded-full"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto max-h-[70vh]">
               {selectedPerson.image_urls.map((url, index) => (
-                <img
-                  key={index}
-                  src={url}
-                  alt={`Reference ${index + 1}`}
-                  className="w-full rounded-lg"
-                />
+                <div key={index} className="relative group">
+                  <img
+                    src={url}
+                    alt={`Reference ${index + 1}`}
+                    className="w-full h-48 object-cover rounded-xl border-2 border-white shadow-lg group-hover:shadow-xl transition-all duration-300"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                  <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm rounded-lg px-2 py-1">
+                    <span className="text-xs font-medium text-gray-700">#{index + 1}</span>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -693,51 +843,71 @@ The Photo Desk Team
         person={editModal.person}
         onSubmit={handleEditSubmit}
       />
-    </>
+
+      <Footer />
+    </div>
   )
 }
 
 const EmailModal = ({ isOpen, onClose, email, onSubmit }: EmailModalProps) => {
   return (
     <Dialog open={isOpen} onOpenChange={() => onClose()}>
-      <DialogContent>
+      <DialogContent className="bg-white/95 backdrop-blur-sm border-0 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Send Images via Email</DialogTitle>
+          <DialogTitle className="text-xl font-semibold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Send Images via Email
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={(e) => {
           e.preventDefault()
           const formData = new FormData(e.currentTarget)
           onSubmit(formData)
         }}>
-          <div className="space-y-4 py-4">
+          <div className="space-y-6 py-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <Mail className="w-4 h-4 text-blue-500" />
+                Email Address
+              </label>
               <Input
                 type="email"
                 name="email"
                 defaultValue={email}
                 readOnly
-                className="w-full"
+                className="w-full h-11 border-2 border-gray-200 bg-gray-50"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Upload ZIP File</label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <Download className="w-4 h-4 text-emerald-500" />
+                Upload ZIP File
+              </label>
               <Input
                 type="file"
                 name="file"
                 accept=".zip"
                 required
-                className="w-full"
+                className="w-full h-11 border-2 border-gray-200 focus:border-emerald-500 focus:ring-emerald-500/20 transition-all duration-300"
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
                 Please upload a ZIP file containing the images
               </p>
             </div>
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={onClose}>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onClose}
+                className="px-6 border-2 border-gray-300 hover:border-gray-400"
+              >
                 Cancel
               </Button>
-              <Button type="submit">
+              <Button 
+                type="submit"
+                className="px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+              >
+                <Mail className="w-4 h-4 mr-2" />
                 Send Email
               </Button>
             </div>
@@ -799,47 +969,63 @@ const EditModal = ({ isOpen, onClose, person, onSubmit }: EditModalProps) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={() => !isLoading && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl bg-white/95 backdrop-blur-sm border-0 shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Edit Record</DialogTitle>
+          <DialogTitle className="text-xl font-semibold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Edit Record
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                required
-                className="w-full"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Date</label>
-              <Input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                required
-                className="w-full"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Time</label>
-              <Input
-                type="time"
-                value={formData.time}
-                onChange={(e) => setFormData(prev => ({ ...prev, time: e.target.value }))}
-                required
-                className="w-full"
-              />
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <Mail className="w-4 h-4 text-blue-500" />
+                  Email Address
+                </label>
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  required
+                  className="w-full h-11 border-2 border-gray-200 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-300"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <Calendar className="w-4 h-4 text-purple-500" />
+                  Date
+                </label>
+                <Input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                  required
+                  className="w-full h-11 border-2 border-gray-200 focus:border-purple-500 focus:ring-purple-500/20 transition-all duration-300"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                  <Clock className="w-4 h-4 text-orange-500" />
+                  Time
+                </label>
+                <Input
+                  type="time"
+                  value={formData.time}
+                  onChange={(e) => setFormData(prev => ({ ...prev, time: e.target.value }))}
+                  required
+                  className="w-full h-11 border-2 border-gray-200 focus:border-orange-500 focus:ring-orange-500/20 transition-all duration-300"
+                />
+              </div>
             </div>
 
             {/* Current Images */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Current Images</label>
-              <div className="grid grid-cols-4 gap-4">
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <ImageIcon className="w-4 h-4 text-emerald-500" />
+                Current Images
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 {person?.image_urls
                   .filter(url => !formData.deletedImageUrls.includes(url))
                   .map((url, index) => (
@@ -847,14 +1033,14 @@ const EditModal = ({ isOpen, onClose, person, onSubmit }: EditModalProps) => {
                       <img
                         src={url}
                         alt={`Image ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg"
+                        className="w-full h-20 object-cover rounded-lg border-2 border-white shadow-md group-hover:shadow-lg transition-all duration-300"
                       />
                       <button
                         type="button"
                         onClick={() => handleImageDelete(url)}
-                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 shadow-lg"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
                   ))}
@@ -862,23 +1048,26 @@ const EditModal = ({ isOpen, onClose, person, onSubmit }: EditModalProps) => {
             </div>
 
             {/* New Images */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Add New Images</label>
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <ImageIcon className="w-4 h-4 text-indigo-500" />
+                Add New Images
+              </label>
               <Input
                 type="file"
                 accept="image/*"
                 multiple
                 onChange={handleNewImages}
-                className="w-full"
+                className="w-full h-11 border-2 border-gray-200 focus:border-indigo-500 focus:ring-indigo-500/20 transition-all duration-300"
               />
               {formData.newImages.length > 0 && (
-                <div className="grid grid-cols-4 gap-4 mt-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mt-3">
                   {formData.newImages.map((file, index) => (
                     <div key={index} className="relative group">
                       <img
                         src={URL.createObjectURL(file)}
                         alt={`New Image ${index + 1}`}
-                        className="w-full h-24 object-cover rounded-lg"
+                        className="w-full h-20 object-cover rounded-lg border-2 border-emerald-200 shadow-md group-hover:shadow-lg transition-all duration-300"
                       />
                       <button
                         type="button"
@@ -886,9 +1075,9 @@ const EditModal = ({ isOpen, onClose, person, onSubmit }: EditModalProps) => {
                           ...prev,
                           newImages: prev.newImages.filter((_, i) => i !== index)
                         }))}
-                        className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 shadow-lg"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
                   ))}
@@ -896,19 +1085,20 @@ const EditModal = ({ isOpen, onClose, person, onSubmit }: EditModalProps) => {
               )}
             </div>
 
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3 pt-6 border-t border-gray-200">
               <Button 
                 type="button" 
                 variant="outline" 
                 onClick={onClose}
                 disabled={isLoading}
+                className="px-6 border-2 border-gray-300 hover:border-gray-400"
               >
                 Cancel
               </Button>
               <Button 
                 type="submit"
                 disabled={isLoading}
-                className="min-w-[100px]"
+                className="px-6 min-w-[120px] bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
@@ -916,7 +1106,10 @@ const EditModal = ({ isOpen, onClose, person, onSubmit }: EditModalProps) => {
                     <span>Saving...</span>
                   </div>
                 ) : (
-                  'Save Changes'
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Save Changes</span>
+                  </div>
                 )}
               </Button>
             </div>
@@ -973,29 +1166,31 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange }: Paginatio
   }
 
   return (
-    <div className="flex items-center gap-1">
-      {/* Previous button */}
+    <div className="flex items-center gap-2">
       <Button
         variant="outline"
         size="sm"
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 1}
-        className="px-2"
+        className="h-9 px-3 bg-white/80 backdrop-blur-sm hover:bg-white border-gray-300 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
       >
         <ChevronLeft className="w-4 h-4" />
       </Button>
       
-      {/* Page numbers */}
       {getVisiblePages().map((page, index) => (
         <div key={index}>
-          {typeof page === 'string' ? (
-            <span className="px-2 py-1 text-gray-500">...</span>
+          {page === '...' ? (
+            <span className="px-3 py-2 text-gray-500">...</span>
           ) : (
             <Button
               variant={currentPage === page ? "default" : "outline"}
               size="sm"
-              onClick={() => onPageChange(page)}
-              className="px-3"
+              onClick={() => onPageChange(page as number)}
+              className={`h-9 px-3 transition-all duration-300 ${
+                currentPage === page
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md hover:shadow-lg border-0'
+                  : 'bg-white/80 backdrop-blur-sm hover:bg-white border-gray-300 hover:border-blue-400 hover:text-blue-600'
+              }`}
             >
               {page}
             </Button>
@@ -1003,13 +1198,12 @@ const PaginationControls = ({ currentPage, totalPages, onPageChange }: Paginatio
         </div>
       ))}
       
-      {/* Next button */}
       <Button
         variant="outline"
         size="sm"
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage === totalPages}
-        className="px-2"
+        className="h-9 px-3 bg-white/80 backdrop-blur-sm hover:bg-white border-gray-300 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
       >
         <ChevronRight className="w-4 h-4" />
       </Button>

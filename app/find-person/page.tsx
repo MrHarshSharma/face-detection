@@ -8,6 +8,7 @@ import { Search, Upload, User, FolderOpen, AlertCircle, ChevronLeft, ChevronRigh
 import { ToastContainer, toast } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import JSZip from 'jszip'
+import { supabase } from '@/lib/supabase'
 
 interface MatchResult {
   file: File
@@ -478,6 +479,26 @@ export default function FindPerson() {
       }
 
       const { fileUrl } = await uploadResponse.json()
+
+      // Update database record completion status
+      if (referenceEmail) {
+        try {
+          const { error: updateError } = await supabase
+            .from('ref_images')
+            .update({ completed: "TRUE" })
+            .eq('email', referenceEmail)
+
+          if (updateError) {
+            console.error('Error updating completion status:', updateError)
+            toast.warning('File uploaded successfully, but failed to update completion status')
+          } else {
+            toast.success('Record marked as completed in database')
+          }
+        } catch (error) {
+          console.error('Database update error:', error)
+          toast.warning('File uploaded successfully, but database update failed')
+        }
+      }
 
       // Open Gmail compose window with drive link
       const subject = encodeURIComponent('Special moment with the relic')

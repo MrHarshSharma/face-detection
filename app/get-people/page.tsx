@@ -457,10 +457,17 @@ The Photo Desk Team
       const referenceData = {
         images: person.image_urls,
         email: person.email,
+        date: person.date,
+        time: person.time,
         timestamp: Date.now()
       }
       
+      console.log('Storing reference data:', referenceData)
       localStorage.setItem('facialRecognitionReference', JSON.stringify(referenceData))
+      
+      // Verify the data was stored correctly
+      const storedData = localStorage.getItem('facialRecognitionReference')
+      console.log('Stored data:', storedData ? JSON.parse(storedData) : null)
       
       // Navigate to find-person page
       window.open('/find-person', '_blank')

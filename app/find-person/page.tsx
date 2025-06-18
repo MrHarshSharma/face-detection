@@ -18,7 +18,11 @@ interface MatchResult {
 export default function FindPerson() {
   const [referenceImages, setReferenceImages] = useState<File[]>([])
   const [referenceImageUrls, setReferenceImageUrls] = useState<string[]>([])
+  const [referenceDate, setReferenceDate] = useState<string>("")
+  const [referenceTime, setReferenceTime] = useState<string>("")
+  const [referenceEmail, setReferenceEmail] = useState<string>("")
   const [folderImages, setFolderImages] = useState<File[]>([])
+  const [folderName, setFolderName] = useState<string>("")
   const [loading, setLoading] = useState(false)
   const [matches, setMatches] = useState<MatchResult[]>([])
   const [faceApiLoaded, setFaceApiLoaded] = useState(false)
@@ -66,12 +70,17 @@ export default function FindPerson() {
   useEffect(() => {
     const loadReferenceImages = async () => {
       try {
+        console.log('Checking for reference data...')
         const referenceData = localStorage.getItem('facialRecognitionReference')
+        console.log('Raw reference data:', referenceData)
+        
         if (referenceData) {
           const data = JSON.parse(referenceData)
+          console.log('Parsed reference data:', data)
           
           // Check if data is not too old (within 1 hour)
           const isRecent = Date.now() - data.timestamp < 3600000
+          console.log('Is data recent?', isRecent)
           
           if (isRecent && data.images && data.images.length > 0) {
             try {
@@ -89,8 +98,18 @@ export default function FindPerson() {
                 imageUrls.push(imageUrl)
               }
               
+              console.log('Setting reference data:', {
+                date: data.date,
+                time: data.time,
+                email: data.email,
+                imageCount: imageFiles.length
+              })
+              
               setReferenceImages(imageFiles)
               setReferenceImageUrls(imageUrls)
+              setReferenceDate(data.date || "")
+              setReferenceTime(data.time || "")
+              setReferenceEmail(data.email || "")
               
               toast.success(`${imageFiles.length} reference images loaded for ${data.email}`)
               
@@ -100,7 +119,14 @@ export default function FindPerson() {
               console.error('Error loading reference images:', error)
               toast.error('Failed to load reference images')
             }
+          } else {
+            console.log('Data is too old or no images found:', {
+              isRecent,
+              hasImages: data.images?.length > 0
+            })
           }
+        } else {
+          console.log('No reference data found in localStorage')
         }
       } catch (error) {
         console.error('Error parsing reference data:', error)
@@ -131,6 +157,12 @@ export default function FindPerson() {
     if (imageFiles.length === 0) {
       toast.error('No image files found in the selected folder')
       return
+    }
+    
+    // Get folder name from the first file's path
+    if (imageFiles[0].webkitRelativePath) {
+      const folderPath = imageFiles[0].webkitRelativePath.split('/')
+      setFolderName(folderPath[0])
     }
     
     setFolderImages(imageFiles)
@@ -294,7 +326,11 @@ export default function FindPerson() {
   const clearAll = () => {
     setReferenceImages([])
     setReferenceImageUrls([])
+    setReferenceDate("")
+    setReferenceTime("")
+    setReferenceEmail("")
     setFolderImages([])
+    setFolderName("")
     setMatches([])
     setSelectedMatch(null)
     setProcessedCount(0)
@@ -382,6 +418,10 @@ export default function FindPerson() {
                     <User className="w-4 h-4" />
                     Reference Images
                   </label>
+                  
+                  {/* Date and Time Information */}
+                 
+
                   <Input
                     type="file"
                     accept="image/*"
@@ -423,6 +463,27 @@ export default function FindPerson() {
                       </div>
                       {referenceImages.length > 1 && (
                         <div className="mt-3">
+                           {(referenceDate || referenceTime) && (
+                    <div className="bg-gray-50 p-3 rounded-lg space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium">Date:</span> {referenceDate ? new Date(referenceDate).toLocaleDateString() : 'Not available'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-gray-600">
+                          <span className="font-medium">Time:</span> {referenceTime || 'Not available'}
+                        </p>
+                      </div>
+                      {referenceEmail && (
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-gray-600">
+                            <span className="font-medium">Email:</span> {referenceEmail}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                           <Button
                             type="button"
                             variant="outline"
@@ -432,9 +493,12 @@ export default function FindPerson() {
                               referenceImageUrls.forEach(url => URL.revokeObjectURL(url))
                               setReferenceImages([])
                               setReferenceImageUrls([])
+                              setReferenceDate("")
+                              setReferenceTime("")
+                              setReferenceEmail("")
                               toast.success('All reference images cleared')
                             }}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                            className="text-red-600 mt-5 hover:text-red-700 hover:bg-red-50 border-red-200"
                           >
                             <X className="w-4 h-4 mr-1" />
                             Clear All References
@@ -459,10 +523,15 @@ export default function FindPerson() {
                     className="w-full"
                   />
                   {folderImages.length > 0 && (
-                    <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                    <div className="mt-4 p-4 bg-blue-50 rounded-lg space-y-2">
                       <p className="text-sm text-blue-700">
                         <strong>{folderImages.length}</strong> images selected from folder
                       </p>
+                      {folderName && (
+                        <p className="text-sm text-blue-700">
+                          <span className="font-medium">Folder:</span> {folderName}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

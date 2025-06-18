@@ -107,7 +107,7 @@ export default function GetPeople() {
       // Build query with filters
       let query = supabase
         .from('ref_images')
-        .select('*', { count: 'exact' })
+        .select('id, email, date, time, completed, created_at, image_urls', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(from, to)
 

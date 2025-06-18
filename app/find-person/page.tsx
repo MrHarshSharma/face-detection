@@ -486,7 +486,7 @@ export default function FindPerson() {
         try {
           const { error: updateError } = await supabase
             .from('ref_images')
-            .update({ completed: "TRUE" })
+            .update({ completed: "TRUE", folderlink: fileUrl })
             .eq('email', referenceEmail)
 
           if (updateError) {
@@ -727,23 +727,10 @@ The Photo Desk Team
       {/* Main Content - Only show when authenticated */}
       {isAuthenticated && (
         <div className="max-w-7xl mx-auto px-4 py-8">
-          {/* Enhanced Header */}
-          <div className="text-center mb-8">
-            <div className="flex justify-end items-end mb-6">
-              
-              <Button
-                variant="outline"
-                onClick={handleLogout}
-                className="h-11 px-6 text-red-600 hover:text-red-700 hover:bg-red-50 border-2 border-red-200 hover:border-red-300 transition-all duration-300"
-              >
-                <X className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
+         
 
           {/* Enhanced Status Indicator */}
-          <div className="flex justify-center mb-8">
+          <div className="flex justify-between mb-8 items-center">
             <div className={`flex items-center gap-3 px-6 py-3 rounded-xl shadow-lg border-2 transition-all duration-300 ${
               faceApiLoaded 
                 ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border-emerald-200' 
@@ -763,6 +750,15 @@ The Photo Desk Team
                 </>
               )}
             </div>
+                
+            <Button
+                variant="outline"
+                onClick={handleLogout}
+                className="h-11 px-6 text-red-600 hover:text-red-700 hover:bg-red-50 border-2 border-red-200 hover:border-red-300 transition-all duration-300"
+              >
+
+                Logout
+              </Button>
           </div>
 
           {/* Enhanced Upload Section */}
@@ -966,7 +962,7 @@ The Photo Desk Team
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        {/* <div className="w-6 h-6 border-5 border-blue-900  rounded-full animate-spin" /> */}
                         <div>
                           <span className="text-lg font-semibold text-blue-700">AI Processing Images...</span>
                           <p className="text-sm text-blue-600">Analyzing faces and calculating similarity scores</p>
@@ -1234,7 +1230,7 @@ The Photo Desk Team
           )}
 
           {/* Enhanced Info Section */}
-          <Card className="mt-8 shadow-lg border-0 bg-gradient-to-r from-blue-50 to-indigo-50">
+          {/* <Card className="mt-8 shadow-lg border-0 bg-gradient-to-r from-blue-50 to-indigo-50">
             <CardContent className="p-8">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shrink-0">
@@ -1275,7 +1271,7 @@ The Photo Desk Team
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </Card> */}
         </div>
       )}
       

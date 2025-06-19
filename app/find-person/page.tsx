@@ -48,7 +48,36 @@ export default function FindPerson() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [sendingEmail, setSendingEmail] = useState(false)
   
+  // New state for directly uploaded images
+  const [directImages, setDirectImages] = useState<File[]>([])
+  const [directImageUrls, setDirectImageUrls] = useState<string[]>([])
+  
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Natural sorting function for filenames with numbers
+  const naturalSort = (a: string, b: string): number => {
+    const reA = /[^a-zA-Z]/g
+    const reN = /[^0-9]/g
+    
+    const aA = a.replace(reA, "")
+    const bA = b.replace(reA, "")
+    
+    if (aA === bA) {
+      const aN = parseInt(a.replace(reN, ""), 10)
+      const bN = parseInt(b.replace(reN, ""), 10)
+      return aN === bN ? 0 : aN > bN ? 1 : -1
+    } else {
+      return aA > bA ? 1 : -1
+    }
+  }
+
+  // Enhanced natural sorting function
+  const naturalSortFilenames = (a: MatchResult, b: MatchResult): number => {
+    return a.fileName.localeCompare(b.fileName, undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    })
+  }
 
   // Check for saved credentials on component mount
   useEffect(() => {
@@ -337,8 +366,8 @@ export default function FindPerson() {
         const validResults = batchResults.filter(result => result !== null) as MatchResult[]
         if (validResults.length > 0) {
           foundMatches.push(...validResults)
-          // Sort and update matches immediately
-          foundMatches.sort((a, b) => b.similarity - a.similarity)
+          // Sort by image name with natural sorting
+          foundMatches.sort(naturalSortFilenames)
           setMatches([...foundMatches])
         }
 
@@ -356,6 +385,9 @@ export default function FindPerson() {
       if (foundMatches.length === 0) {
         toast.info('No matches found')
       } else {
+        // Final sort by image name with natural sorting
+        foundMatches.sort(naturalSortFilenames)
+        setMatches(foundMatches)
         toast.success(`Found ${foundMatches.length} total matches`)
       }
     } catch (error) {
@@ -381,6 +413,7 @@ export default function FindPerson() {
     setProcessedCount(0)
     setProcessingStarted(false)
     setCurrentImageIndex(0)
+    // Don't clear direct images and email as they are independent
   }
 
   const filteredMatches = matches.filter(m => m.similarity >= 50)
@@ -440,9 +473,52 @@ export default function FindPerson() {
     })
   }
 
+  // New function to handle direct image uploads
+  const handleDirectImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    const imageFiles = files.filter(file => file.type.startsWith('image/'))
+    
+    if (imageFiles.length === 0) {
+      toast.error('Please select valid image files')
+      return
+    }
+    
+    // Add to existing direct images
+    const newImages = [...directImages, ...imageFiles]
+    const newUrls = [...directImageUrls, ...imageFiles.map(file => URL.createObjectURL(file))]
+    
+    setDirectImages(newImages)
+    setDirectImageUrls(newUrls)
+    toast.success(`${imageFiles.length} images added for direct sending`)
+  }
+
+  // New function to remove a direct image
+  const removeDirectImage = (indexToRemove: number) => {
+    const newDirectImages = directImages.filter((_, index) => index !== indexToRemove)
+    const newDirectImageUrls = directImageUrls.filter((_, index) => index !== indexToRemove)
+    
+    // Revoke the URL to prevent memory leaks
+    URL.revokeObjectURL(directImageUrls[indexToRemove])
+    
+    setDirectImages(newDirectImages)
+    setDirectImageUrls(newDirectImageUrls)
+    
+    toast.success('Image removed')
+  }
+
+  // New function to clear all direct images
+  const clearDirectImages = () => {
+    directImageUrls.forEach(url => URL.revokeObjectURL(url))
+    setDirectImages([])
+    setDirectImageUrls([])
+    toast.success('All direct images cleared')
+  }
+
   const handleSendEmail = async () => {
-    if (selectedMatches.size === 0) {
-      toast.warning('Please select at least one image to send via email')
+    const totalSelectedImages = selectedMatches.size + directImages.length
+    
+    if (totalSelectedImages === 0) {
+      toast.warning('Please select matched images or add direct images to send via email')
       return
     }
 
@@ -465,13 +541,14 @@ export default function FindPerson() {
         throw new Error('Could not create folder in ZIP')
       }
 
-      // Add selected images to ZIP with compression
+      // Add selected match images to ZIP with compression
       const selectedImages = Array.from(selectedMatches).map(index => filteredMatches[index])
       let totalSize = 0
       const maxTotalSize = 50 * 1024 * 1024 // 50MB limit for ZIP
       
-      toast.info(`Compressing ${selectedImages.length} images...`)
+      toast.info(`Compressing ${totalSelectedImages} images (${selectedImages.length} matches + ${directImages.length} direct)...`)
       
+      // Process matched images first
       for (let i = 0; i < selectedImages.length; i++) {
         const match = selectedImages[i]
         try {
@@ -491,10 +568,10 @@ export default function FindPerson() {
             }
             
             totalSize += compressedSize
-            folder.file(`image_${i + 1}_${match.fileName}`, compressedBlob)
+            folder.file(`match_${i + 1}_${match.fileName}`, compressedBlob)
             
             // Update progress
-            toast.info(`Processed ${i + 1}/${selectedImages.length} images (${(totalSize / (1024 * 1024)).toFixed(1)}MB)`, {
+            toast.info(`Processed ${i + 1}/${totalSelectedImages} images (${(totalSize / (1024 * 1024)).toFixed(1)}MB)`, {
               toastId: 'compression-progress'
             })
           } catch (compressionError) {
@@ -503,13 +580,53 @@ export default function FindPerson() {
             const originalSize = blob.size
             if (totalSize + originalSize <= maxTotalSize) {
               totalSize += originalSize
-              folder.file(`image_${i + 1}_${match.fileName}`, blob)
+              folder.file(`match_${i + 1}_${match.fileName}`, blob)
             } else {
               toast.warning(`Skipping ${match.fileName} - too large`)
             }
           }
         } catch (error) {
           console.error(`Error processing image ${match.fileName}:`, error)
+        }
+      }
+
+      // Process direct images
+      for (let i = 0; i < directImages.length; i++) {
+        const directImage = directImages[i]
+        try {
+          // Compress the direct image
+          try {
+            const compressedBlob = await compressImage(directImage, 0.7, 1920)
+            
+            const compressedSize = compressedBlob.size
+            
+            // Check if adding this image would exceed the limit
+            if (totalSize + compressedSize > maxTotalSize) {
+              toast.warning(`Skipping remaining images to keep ZIP under 50MB limit`)
+              break
+            }
+            
+            totalSize += compressedSize
+            folder.file(`direct_${i + 1}_${directImage.name}`, compressedBlob)
+            
+            // Update progress
+            const currentProgress = selectedImages.length + i + 1
+            toast.info(`Processed ${currentProgress}/${totalSelectedImages} images (${(totalSize / (1024 * 1024)).toFixed(1)}MB)`, {
+              toastId: 'compression-progress'
+            })
+          } catch (compressionError) {
+            console.error(`Failed to compress ${directImage.name}, using original:`, compressionError)
+            // Fallback to original image if compression fails
+            const originalSize = directImage.size
+            if (totalSize + originalSize <= maxTotalSize) {
+              totalSize += originalSize
+              folder.file(`direct_${i + 1}_${directImage.name}`, directImage)
+            } else {
+              toast.warning(`Skipping ${directImage.name} - too large`)
+            }
+          }
+        } catch (error) {
+          console.error(`Error processing direct image ${directImage.name}:`, error)
         }
       }
 
@@ -573,7 +690,7 @@ export default function FindPerson() {
         try {
           const { error: updateError } = await supabase
             .from('ref_images')
-            .update({ completed: "TRUE", folderlink: fileUrl })
+            .update({ completed: "TRUE", drivelink: fileUrl, foldername: folderName })
             .eq('email', referenceEmail)
 
           if (updateError) {
@@ -599,7 +716,7 @@ Please find your special moment with the relic. This link will be accessible thr
 Visitor Details:
 - Date: ${referenceDate ? new Date(referenceDate).toLocaleDateString() : 'Not available'}
 - Time: ${referenceTime || 'Not available'}
-- Images: ${selectedMatches.size}
+- Total Images: ${totalSelectedImages}
 - Download Link: ${fileUrl}
 
 Wishing you blessings and joy,
@@ -620,7 +737,7 @@ The Photo Desk Team
         `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
       )
 
-      toast.success(`ZIP file uploaded to Google Drive and email window opened for ${selectedMatches.size} selected images`)
+      toast.success(`ZIP file uploaded to Google Drive and email window opened for ${totalSelectedImages} total images`)
       
     } catch (error) {
       console.error('Error sending email:', error)
@@ -1126,7 +1243,7 @@ The Photo Desk Team
                   </Card>
                 )
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
                   {filteredMatches.map((match, index) => (
                     <Card 
                       key={index} 
@@ -1171,7 +1288,7 @@ The Photo Desk Team
                             <img
                               src={match.imageUrl}
                               alt={match.fileName}
-                              className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                              className="w-full h-100 object-contain group-hover:scale-105 transition-transform duration-300"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                             <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm rounded-lg px-2 py-1">
@@ -1194,12 +1311,88 @@ The Photo Desk Team
             </div>
           )}
 
+          {/* Independent Direct Image Upload Section - Always Visible */}
+          <Card className="mt-8 shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+            <CardContent className="p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                  <Upload className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">Additional Images</h3>
+                  <p className="text-sm text-gray-500">Add extra images to include with the email</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleDirectImageChange}
+                  className="w-full h-12 border-2 border-gray-200 focus:border-purple-500 focus:ring-purple-500/20 transition-all duration-300"
+                  multiple
+                />
+                
+                {directImages.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-purple-500" />
+                        <p className="text-sm font-medium text-gray-700">
+                          {directImages.length} additional image{directImages.length > 1 ? 's' : ''} added
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={clearDirectImages}
+                        className="h-8 px-3 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 hover:border-red-300 transition-all duration-300"
+                      >
+                        <X className="w-3 h-3 mr-1" />
+                        Clear All
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                      {directImageUrls.map((url, index) => (
+                        <div key={index} className="relative group">
+                          <div className="relative overflow-hidden rounded-xl border-2 border-white shadow-lg hover:shadow-xl transition-all duration-300">
+                            <img
+                              src={url}
+                              alt={`Additional ${index + 1}`}
+                              className="w-full h-20 object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeDirectImage(index)}
+                            className="absolute -top-2 -right-2 bg-gradient-to-r from-red-500 to-pink-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110 shadow-lg"
+                            title="Remove image"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <div className="absolute bottom-1 left-1 right-1">
+                            <div className="bg-gradient-to-r from-purple-500 to-pink-600 text-white text-xs px-2 py-1 rounded-full text-center font-medium">
+                              +{index + 1}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Enhanced Send Email Button */}
-          {filteredMatches.length > 0 && !loading && (
+          {(filteredMatches.length > 0 || directImages.length > 0) && !loading && (
             <div className="mt-8 flex justify-end">
               <Button
                 onClick={handleSendEmail}
-                disabled={selectedMatches.size === 0 || sendingEmail}
+                disabled={(selectedMatches.size === 0 && directImages.length === 0) || sendingEmail}
                 className="px-8 h-12 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
               >
                 {sendingEmail ? (
@@ -1210,7 +1403,7 @@ The Photo Desk Team
                 ) : (
                   <div className="flex items-center gap-2">
                     <Mail className="w-4 h-4" />
-                    <span>Send Email {selectedMatches.size > 0 && `(${selectedMatches.size})`}</span>
+                    <span>Send Email {(selectedMatches.size > 0 || directImages.length > 0) && `(${selectedMatches.size + directImages.length})`}</span>
                   </div>
                 )}
               </Button>

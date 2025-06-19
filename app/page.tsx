@@ -3,11 +3,11 @@
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import Link from "next/link"
-import { UserPlus, Users, CheckCircle, XCircle, BarChart3 } from "lucide-react"
+import { UserPlus, Users, CheckCircle, XCircle, BarChart3, Calendar, TrendingUp } from "lucide-react"
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { toast, ToastContainer } from "react-toastify"
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import Footer from "@/components/Footer"
 
 interface DailyStats {
@@ -15,11 +15,18 @@ interface DailyStats {
   count: number;
 }
 
+interface PeriodStats {
+  date: string;
+  count: number;
+  formattedDate: string;
+}
+
 interface Analytics {
   totalRecords: number;
   completedRecords: number;
   pendingRecords: number;
   dailyStats: DailyStats[];
+  periodStats: PeriodStats[];
 }
 
 export default function Home() {
@@ -27,7 +34,8 @@ export default function Home() {
     totalRecords: 0,
     completedRecords: 0,
     pendingRecords: 0,
-    dailyStats: []
+    dailyStats: [],
+    periodStats: []
   });
   const [loading, setLoading] = useState(true);
 
@@ -35,6 +43,7 @@ export default function Home() {
     fetchAnalytics();
     getTotalRecordsCount();
   }, []);
+  
   const getTotalRecordsCount = async () => {
     try {
       const { count, error } = await supabase
@@ -131,14 +140,88 @@ export default function Home() {
         .sort((a, b) => a.dayIndex - b.dayIndex) // Sort by day index (0 = today, 6 = 6 days ago)
         .map(({ date, count }) => ({ date, count }))
 
+      // Get period statistics from 21/11/2024 to 4/01/2025 using the date column
+      const startDate = '2024-11-21'
+      const endDate = '2025-01-04'
+      
+      // Generate all dates in the range
+      const periodDates: PeriodStats[] = []
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      
+      const currentDate = new Date(start)
+      while (currentDate <= end) {
+        const year = currentDate.getFullYear()
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0')
+        const day = String(currentDate.getDate()).padStart(2, '0')
+        const dateString = `${year}-${month}-${day}`
+        
+        periodDates.push({
+          date: dateString,
+          count: 0,
+          formattedDate: currentDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric' 
+          })
+        })
+        
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
+
+      // Get actual counts for each date in the period
+      let allPeriodData: any[] = []
+      let from = 0
+      const batchSize = 1000
+      let hasMore = true
+
+      while (hasMore) {
+        const { data: batchData, error: batchError } = await supabase
+          .from('ref_images')
+          .select('date')
+          .gte('date', startDate)
+          .lte('date', endDate)
+          .range(from, from + batchSize - 1)
+
+        if (batchError) {
+          console.error('Error fetching period batch:', batchError)
+          break
+        }
+
+        if (batchData && batchData.length > 0) {
+          allPeriodData = [...allPeriodData, ...batchData]
+          from += batchSize
+          hasMore = batchData.length === batchSize
+        } else {
+          hasMore = false
+        }
+      }
+
+      console.log(`Fetched ${allPeriodData.length} records for period analysis`)
+
+      if (allPeriodData.length > 0) {
+        // Count occurrences of each date
+        const dateCounts: { [key: string]: number } = {}
+        allPeriodData.forEach(record => {
+          if (record.date) {
+            dateCounts[record.date] = (dateCounts[record.date] || 0) + 1
+          }
+        })
+
+        // Update periodDates with actual counts
+        periodDates.forEach(dateEntry => {
+          dateEntry.count = dateCounts[dateEntry.date] || 0
+        })
+      }
+
       console.log('Daily statistics:', sortedDays)
-      console.log('Today date string:', sortedDays[0]?.date)
+      console.log('Period statistics:', periodDates)
 
       setAnalytics({
         totalRecords: totalCount || 0,
         completedRecords: completedCount || 0,
         pendingRecords: pendingCount || 0,
-        dailyStats: sortedDays
+        dailyStats: sortedDays,
+        periodStats: periodDates
       });
 
       // Show total count in console
@@ -154,7 +237,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-[80vh] space-y-4">
+    <div className="min-h-[80vh] space-y-8">
       <ToastContainer />
       
       {/* Header Section */}
@@ -163,6 +246,7 @@ export default function Home() {
         <p className="text-gray-600">Facial Recognition System Analytics</p>
       </div>
 
+     
       {/* Main Analytics Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
@@ -364,6 +448,85 @@ export default function Home() {
           </Card>
         </div>
       </div>
+
+ {/* Period Chart - Full Width */}
+      <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 border-0 shadow-lg">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+            <TrendingUp className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">Records Timeline</h2>
+            <p className="text-sm text-gray-500">21 Nov 2024 to 4 Jan 2025 • Total: {analytics.periodStats.reduce((sum, day) => sum + day.count, 0)} records</p>
+          </div>
+        </div>
+        
+        <div className="h-96 overflow-x-auto">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-sm text-gray-500 font-medium">Loading timeline data...</p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ width: `${analytics.periodStats.length * 25}px`, minWidth: '100%' }}>
+              <ResponsiveContainer width="100%" height={350}>
+                <BarChart data={analytics.periodStats} margin={{ top: 20, right: 30, left: 20, bottom: 80 }}>
+                  <defs>
+                    <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6366f1" />
+                      <stop offset="100%" stopColor="#8b5cf6" />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis 
+                    dataKey="formattedDate" 
+                    tick={{ fontSize: 10 }}
+                    angle={-90}
+                    textAnchor="end"
+                    height={100}
+                    interval={0} // Show every date
+                  />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip 
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}
+                    formatter={(value: number, name: string, props: any) => [
+                      <span key="value" className="font-semibold text-indigo-600">
+                        {value} records
+                      </span>,
+                      <span key="date" className="text-gray-600">
+                        {new Date(props.payload.date).toLocaleDateString('en-US', { 
+                          weekday: 'short',
+                          month: 'short', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    ]}
+                    labelFormatter={() => ''}
+                  />
+                  <Bar 
+                    dataKey="count" 
+                    fill="url(#barGradient)"
+                    radius={[2, 2, 0, 0]}
+                    stroke="#4f46e5"
+                    strokeWidth={0.5}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </Card>
+
 
       {/* Action Cards Section */}
       {/* <div className="mt-12">

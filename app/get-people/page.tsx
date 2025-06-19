@@ -791,7 +791,7 @@ The Photo Desk Team
           className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => setSelectedPerson(null)}
         >
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 max-w-6xl w-full shadow-2xl border border-white/20" onClick={e => e.stopPropagation()}>
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 max-w-7xl w-full max-h-[95vh] overflow-auto shadow-2xl border border-white/20" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
@@ -811,13 +811,13 @@ The Photo Desk Team
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto max-h-[70vh]">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {selectedPerson.image_urls.map((url, index) => (
                 <div key={index} className="relative group">
                   <img
                     src={url}
                     alt={`Reference ${index + 1}`}
-                    className="w-full h-48 object-cover rounded-xl border-2 border-white shadow-lg group-hover:shadow-xl transition-all duration-300"
+                    className="w-full h-auto object-contain rounded-xl border-2 border-white shadow-lg group-hover:shadow-xl transition-all duration-300 max-h-none"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
                   <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm rounded-lg px-2 py-1">

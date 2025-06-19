@@ -406,6 +406,40 @@ export default function FindPerson() {
     }
   }
 
+  // Image compression utility function
+  const compressImage = (file: File, quality: number = 0.7, maxWidth: number = 1920): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+      
+      img.onload = () => {
+        // Calculate new dimensions while maintaining aspect ratio
+        let { width, height } = img
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width
+          width = maxWidth
+        }
+        
+        canvas.width = width
+        canvas.height = height
+        
+        // Draw and compress the image
+        ctx?.drawImage(img, 0, 0, width, height)
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('Failed to compress image'))
+          }
+        }, 'image/jpeg', quality)
+      }
+      
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
   const handleSendEmail = async () => {
     if (selectedMatches.size === 0) {
       toast.warning('Please select at least one image to send via email')
@@ -420,7 +454,7 @@ export default function FindPerson() {
     setSendingEmail(true)
 
     try {
-      // toast.info('Creating ZIP file with selected images...')
+      toast.info('Creating optimized ZIP file with selected images...')
 
       // Create ZIP file with selected images
       const zip = new JSZip()
@@ -431,25 +465,78 @@ export default function FindPerson() {
         throw new Error('Could not create folder in ZIP')
       }
 
-      // Add selected images to ZIP
+      // Add selected images to ZIP with compression
       const selectedImages = Array.from(selectedMatches).map(index => filteredMatches[index])
+      let totalSize = 0
+      const maxTotalSize = 50 * 1024 * 1024 // 50MB limit for ZIP
+      
+      toast.info(`Compressing ${selectedImages.length} images...`)
       
       for (let i = 0; i < selectedImages.length; i++) {
         const match = selectedImages[i]
         try {
           const response = await fetch(match.imageUrl)
           const blob = await response.blob()
-          folder.file(`image_${i + 1}_${match.fileName}`, blob)
+          
+          // Compress the image to reduce file size
+          try {
+            const compressedBlob = await compressImage(new File([blob], match.fileName), 0.7, 1920)
+            
+            const compressedSize = compressedBlob.size
+            
+            // Check if adding this image would exceed the limit
+            if (totalSize + compressedSize > maxTotalSize) {
+              toast.warning(`Skipping remaining images to keep ZIP under 50MB limit`)
+              break
+            }
+            
+            totalSize += compressedSize
+            folder.file(`image_${i + 1}_${match.fileName}`, compressedBlob)
+            
+            // Update progress
+            toast.info(`Processed ${i + 1}/${selectedImages.length} images (${(totalSize / (1024 * 1024)).toFixed(1)}MB)`, {
+              toastId: 'compression-progress'
+            })
+          } catch (compressionError) {
+            console.error(`Failed to compress ${match.fileName}, using original:`, compressionError)
+            // Fallback to original image if compression fails
+            const originalSize = blob.size
+            if (totalSize + originalSize <= maxTotalSize) {
+              totalSize += originalSize
+              folder.file(`image_${i + 1}_${match.fileName}`, blob)
+            } else {
+              toast.warning(`Skipping ${match.fileName} - too large`)
+            }
+          }
         } catch (error) {
-          console.error(`Error adding image ${match.fileName} to ZIP:`, error)
+          console.error(`Error processing image ${match.fileName}:`, error)
         }
       }
 
-      // Generate ZIP file
-      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      toast.info('Generating ZIP file...')
+
+      // Generate ZIP file with compression
+      const zipBlob = await zip.generateAsync({ 
+        type: 'blob',
+        compression: 'DEFLATE',
+        compressionOptions: {
+          level: 6
+        }
+      })
+      
+      const finalZipSize = zipBlob.size
+      console.log(`Final ZIP size: ${(finalZipSize / (1024 * 1024)).toFixed(2)}MB`)
+      
+      // Check final ZIP size
+      if (finalZipSize > 80 * 1024 * 1024) { // 80MB limit
+        toast.error('ZIP file is still too large. Please select fewer images.')
+        setSendingEmail(false)
+        return
+      }
+      
       const zipFile = new File([zipBlob], `${folderName}.zip`, { type: 'application/zip' })
 
-      toast.info('Uploading to Google Drive...')
+      toast.info(`Uploading ${(finalZipSize / (1024 * 1024)).toFixed(1)}MB ZIP to Google Drive...`)
 
       // Upload to Google Drive using existing API route
       const uploadFormData = new FormData()

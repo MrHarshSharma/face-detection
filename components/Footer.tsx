@@ -2,7 +2,7 @@ const Footer = () => {
   return (
     <div className="text-center mt-16 py-8 border-t border-gray-200">
         <p className="text-sm text-gray-500">
-          Face Recognition System • Version 1.0 • Powered by AI
+          Face Recognition System • Version 5.7 • Powered by AI
         </p>
       </div>
   )

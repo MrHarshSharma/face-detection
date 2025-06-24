@@ -705,8 +705,8 @@ The Photo Desk Team
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="grid grid-cols-3 gap-2">
-                              <TooltipProvider delayDuration={100}>
+                            <div className="gap-2 flex justify-end items-center">
+                                {!person.completed && <TooltipProvider delayDuration={100}>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
@@ -722,7 +722,8 @@ The Photo Desk Team
                                     <p>Facial Recognition</p>
                                   </TooltipContent>
                                 </Tooltip>
-                              </TooltipProvider>
+                              </TooltipProvider>}
+                              
 
                               <TooltipProvider delayDuration={100}>
                                 <Tooltip>

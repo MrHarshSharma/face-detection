@@ -10,6 +10,10 @@ import 'react-toastify/dist/ReactToastify.css'
 import JSZip from 'jszip'
 import { supabase } from '@/lib/supabase'
 import Footer from "@/components/Footer"
+import { useAuth } from '@/contexts/AuthContext'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import AuthHeader from '@/components/auth/AuthHeader'
+import LoginModal from '@/components/auth/LoginModal'
 
 interface MatchResult {
   file: File
@@ -18,18 +22,8 @@ interface MatchResult {
   fileName: string
 }
 
-// JWT creation for Google Service Account authentication
-const AdminEmail = process.env.ADMIN_EMAIL
-const AdminPassword = process.env.ADMIN_PASSWORD
-
 export default function FindPerson() {
-  // Authentication states
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [showLoginModal, setShowLoginModal] = useState(true)
-  const [loginEmail, setLoginEmail] = useState("")
-  const [loginPassword, setLoginPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [loginLoading, setLoginLoading] = useState(false)
+  const { isAuthenticated, user } = useAuth()
 
   const [referenceImages, setReferenceImages] = useState<File[]>([])
   const [referenceImageUrls, setReferenceImageUrls] = useState<string[]>([])
@@ -78,33 +72,6 @@ export default function FindPerson() {
       sensitivity: 'base'
     })
   }
-
-  // Check for saved credentials on component mount
-  useEffect(() => {
-    const checkSavedCredentials = () => {
-      try {
-        const savedCredentials = localStorage.getItem('findPersonCredentials')
-        if (savedCredentials) {
-          const { email, password } = JSON.parse(savedCredentials)
-          if (email === "exposition@gmail.com" && password === "exposition") {
-            setLoginEmail(email)
-            setLoginPassword(password)
-            setIsAuthenticated(true)
-            setShowLoginModal(false)
-            toast.success('Automatically logged in with saved credentials')
-          } else {
-            // Clear invalid credentials
-            localStorage.removeItem('findPersonCredentials')
-          }
-        }
-      } catch (error) {
-        console.error('Error checking saved credentials:', error)
-        localStorage.removeItem('findPersonCredentials')
-      }
-    }
-
-    checkSavedCredentials()
-  }, [])
 
   // Load face-api.js models
   useEffect(() => {
@@ -690,7 +657,7 @@ export default function FindPerson() {
         try {
           const { error: updateError } = await supabase
             .from('ref_images')
-            .update({ completed: "TRUE", drivelink: fileUrl, foldername: folderName })
+            .update({ completed: "TRUE", drivelink: fileUrl, foldername: folderName, user: JSON.parse(localStorage.getItem('findPersonCredentials') || '{}').email })
             .eq('email', referenceEmail)
 
           if (updateError) {
@@ -783,187 +750,24 @@ The Photo Desk Team
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [selectedMatch, currentImageIndex, filteredMatches.length])
 
-  // Authentication handler
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!loginEmail.trim() || !loginPassword.trim()) {
-      toast.error('Please enter both email and password')
-      return
-    }
-
-    setLoginLoading(true)
-
-    try {
-      // Simulate authentication - replace with your actual authentication logic
-      if(loginEmail === "exposition@gmail.com" && loginPassword === "exposition") {
-        
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
-      
-      // For demo purposes, accept any email/password combination
-      // In production, you'd validate against your authentication system
-      setIsAuthenticated(true)
-      setShowLoginModal(false)
-      
-      // Save credentials to localStorage
-      const credentials = {
-        email: loginEmail,
-        password: loginPassword
-      }
-      localStorage.setItem('findPersonCredentials', JSON.stringify(credentials))
-      
-      toast.success('Successfully authenticated!')
-    }else{
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
-
-      toast.error('Invalid email or password')
-    }
-    } catch (error) {
-      toast.error('Authentication failed. Please try again.')
-    } finally {
-      setLoginLoading(false)
-    }
-  }
-
-  const handleLogout = () => {
-    setIsAuthenticated(false)
-    setShowLoginModal(true)
-    setLoginEmail("")
-    setLoginPassword("")
-    
-    // Clear saved credentials from localStorage
-    localStorage.removeItem('findPersonCredentials')
-    
-    // Clear all data when logging out
-    clearAll()
-    
-    toast.info('Logged out successfully')
-  }
-
   return (
-    <div className="min-h-[80vh]">
-      <ToastContainer />
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
-      
-      {/* Enhanced Login Modal */}
-      {showLoginModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-8 max-w-md w-full shadow-2xl border border-white/20">
-            <div className="text-center mb-6">
-              <div className="flex justify-center mb-4">
-                <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-                  <Scan className="w-8 h-8 text-white" />
-                </div>
-              </div>
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
-                Facial Recognition Access
-              </h2>
-              <p className="text-gray-600">Secure authentication required for face detection system</p>
-            </div>
-            
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <Mail className="w-4 h-4 text-blue-500" />
-                  Email Address
-                </label>
-                <Input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  className="w-full h-12 border-2 border-gray-200 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-300"
-                  required
-                  disabled={loginLoading}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-                  <Lock className="w-4 h-4 text-purple-500" />
-                  Password
-                </label>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    className="w-full h-12 pr-12 border-2 border-gray-200 focus:border-purple-500 focus:ring-purple-500/20 transition-all duration-300"
-                    required
-                    disabled={loginLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-purple-600 transition-colors duration-300"
-                    disabled={loginLoading}
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-              
-              <Button
-                type="submit"
-                disabled={loginLoading}
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
-              >
-                {loginLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Authenticating...</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-4 h-4" />
-                    <span>Secure Sign In</span>
-                  </div>
-                )}
-              </Button>
-            </form>
-            
-           
-          </div>
-        </div>
-      )}
-
-      {/* Main Content - Only show when authenticated */}
-      {isAuthenticated && (
+    <ProtectedRoute>
+      <div className="min-h-[80vh]">
+        <ToastContainer />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+        
+        {/* Login Modal - Now handled globally */}
+        <LoginModal />
+        
         <div className="max-w-7xl mx-auto px-4 py-8">
-         
-
           {/* Enhanced Status Indicator */}
-          <div className="flex justify-between mb-8 items-center">
-            <div className={`flex items-center gap-3 px-6 py-3 rounded-xl shadow-lg border-2 transition-all duration-300 ${
-              faceApiLoaded 
-                ? 'bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 border-emerald-200' 
-                : 'bg-gradient-to-r from-yellow-50 to-orange-50 text-yellow-700 border-yellow-200'
-            }`}>
-              {faceApiLoaded ? (
-                <>
-                  <div className="w-3 h-3 bg-emerald-500 rounded-full shadow-lg"></div>
-                  <Zap className="w-5 h-5 text-emerald-600" />
-                  <span className="font-semibold">AI Models Ready • Face Recognition Active</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse shadow-lg"></div>
-                  <Clock className="w-5 h-5 text-yellow-600" />
-                  <span className="font-semibold">Loading AI Models...</span>
-                </>
-              )}
-            </div>
-                
-            <Button
-                variant="outline"
-                onClick={handleLogout}
-                className="h-11 px-6 text-red-600 hover:text-red-700 hover:bg-red-50 border-2 border-red-200 hover:border-red-300 transition-all duration-300"
-              >
-
-                Logout
-              </Button>
-          </div>
+          <AuthHeader 
+            status={{
+              isReady: faceApiLoaded,
+              readyText: "AI Models Ready • Face Recognition Active",
+              loadingText: "Loading AI Models..."
+            }}
+          />
 
           {/* Enhanced Upload Section */}
           <Card className="mb-8 shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
@@ -1553,9 +1357,9 @@ The Photo Desk Team
             </CardContent>
           </Card> */}
         </div>
-      )}
+      </div>
       
       <Footer />
-    </div>
+    </ProtectedRoute>
   )
 } 

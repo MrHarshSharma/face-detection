@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import AuthHeader from '@/components/auth/AuthHeader'
 import LoginModal from '@/components/auth/LoginModal'
+import { faceApiModelLoader } from '@/lib/faceApiCache'
 
 interface MatchResult {
   file: File
@@ -73,33 +74,34 @@ export default function FindPerson() {
     })
   }
 
-  // Load face-api.js models
+  // Load face-api.js models with caching
   useEffect(() => {
     const loadModels = async () => {
       try {
-        // Load face-api.js from CDN
-        const script = document.createElement('script')
-        script.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js'
-        script.onload = async () => {
-          // @ts-ignore
-          const faceapi = window.faceapi
-          
-          await Promise.all([
-            faceapi.nets.ssdMobilenetv1.loadFromUri('/models'),
-            faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-            faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
-          ])
-          
-          setFaceApiLoaded(true)
-          toast.success('Face recognition models loaded')
+        setFaceApiLoaded(false)
+        console.log('🚀 Starting face-api.js model loading...')
+        
+        await faceApiModelLoader.loadModelsWithCache()
+        
+        setFaceApiLoaded(true)
+        console.log('✅ All face recognition models loaded successfully')
+        toast.success('Face recognition models loaded from cache', {
+          toastId: 'models-loaded'
+        })
+        
+        // Display cache info in console
+        const cacheInfo = await faceApiModelLoader.getCacheInfo()
+        if (cacheInfo.length > 0) {
+          const totalSize = cacheInfo.reduce((sum, info) => sum + info.size, 0)
+          console.log(`📊 Cache info: ${cacheInfo.length} models, ${(totalSize / 1024 / 1024).toFixed(2)}MB total`)
         }
-        script.onerror = () => {
-          toast.error('Failed to load face recognition models')
-        }
-        document.head.appendChild(script)
+        
       } catch (error) {
-        console.error('Error loading face-api models:', error)
-        toast.error('Failed to initialize face recognition')
+        console.error('❌ Error loading face-api models:', error)
+        toast.error('Failed to load face recognition models. Please refresh the page.', {
+          toastId: 'models-error'
+        })
+        setFaceApiLoaded(false)
       }
     }
 

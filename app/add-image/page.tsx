@@ -151,8 +151,11 @@ export default function AddImage() {
   return (
     <div className="min-h-[80vh]">
       <ToastContainer />
-      
-      <div className="max-w-4xl mx-auto px-4">
+      {true ? (
+        <div className="max-w-4xl mx-auto px-4 my-auto flex justify-center items-center h-screen">
+        <span>This page is under maintenance. Please check back later.</span>
+        </div>):(
+        <div className="max-w-4xl mx-auto px-4">
         {/* Header Section */}
         
 
@@ -335,6 +338,8 @@ export default function AddImage() {
           </CardContent>
         </Card>
       </div>
+      )}
+      
       <Footer />
     </div>
   )

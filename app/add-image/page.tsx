@@ -151,7 +151,7 @@ export default function AddImage() {
   return (
     <div className="min-h-[80vh]">
       <ToastContainer />
-      {true ? (
+      {false ? (
         <div className="max-w-4xl mx-auto px-4 my-auto flex justify-center items-center h-screen">
         <span>This page is under maintenance. Please check back later.</span>
         </div>):(

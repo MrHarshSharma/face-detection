@@ -540,11 +540,11 @@ export default function Home() {
                           <div className="bg-white/95 border-none rounded-xl p-4 shadow-2xl">
                             <div className="text-sm font-medium text-gray-600 mb-2">
                               {new Date(data.date).toLocaleDateString('en-US', { 
-                                weekday: 'short',
-                                month: 'short', 
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
+                          weekday: 'short',
+                          month: 'short', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
                             </div>
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
@@ -557,7 +557,7 @@ export default function Home() {
                                 <div className="w-3 h-3 bg-gradient-to-b from-green-500 to-green-600 rounded-sm"></div>
                                 <span style={{ color: '#22c55e' }} className="font-semibold">
                                   {data.completed} Completed Records
-                                </span>
+                      </span>
                               </div>
                             </div>
                           </div>

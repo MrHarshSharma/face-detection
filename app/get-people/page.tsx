@@ -322,7 +322,7 @@ export default function GetPeople() {
       uploadFormData.append('file', file)
       uploadFormData.append('email', email)
 
-      const uploadResponse = await fetch('/api/upload-to-drive', {
+      const uploadResponse = await fetch('/api/upload-to-storage', {
         method: 'POST',
         body: uploadFormData,
       })
@@ -342,7 +342,7 @@ We sincerely thank you and deeply appreciate your patience and understanding.
 Please find your special moment with the relic:
 ${fileUrl}
 
-This link will be accessible through Google Drive and will expire in 7 days.
+This secure link will be accessible and will expire in 7 days.
 
 Wishing you blessings and joy,
 The Photo Desk Team

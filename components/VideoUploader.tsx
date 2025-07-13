@@ -65,20 +65,20 @@ const EmailPopup = ({ isOpen, onClose, videoName, imageName, snapshots }: EmailP
       await Promise.all(promises);
       const zipContent = await zip.generateAsync({ type: 'blob' });
 
-      // Upload to Google Drive API
+      // Upload to Supabase storage using existing API route
       const formData = new FormData();
       const filename = `${email}.zip`;
-      formData.append('file', zipContent);
-      formData.append('filename', filename);
+      formData.append('file', zipContent, filename);
+      formData.append('email', email);
 
-      const response = await fetch('/api/upload-to-drive', {
+      const response = await fetch('/api/upload-to-storage', {
         method: 'POST',
         body: formData,
       });
 
       const { fileUrl } = await response.json();
 
-      // Open Gmail with drive link
+      // Open Gmail with Supabase storage link
       const subject = "Your Images";
       const body = `This is an automated email. Do not reply to this email.\n\nPlease find your Images here: ${fileUrl}\n\nImages will be automatically vanished after 7 days.\n\nRegards,\nTeam FacialID`;
       const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}&html=true`;
@@ -105,7 +105,7 @@ const EmailPopup = ({ isOpen, onClose, videoName, imageName, snapshots }: EmailP
       onClose();
     } catch (error) {
       console.error('Error uploading file:', error);
-      toast.error('Error uploading file to Google Drive');
+      toast.error('Error uploading file to Supabase storage');
     } finally {
       setIsUploading(false);
     }

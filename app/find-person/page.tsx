@@ -622,14 +622,14 @@ export default function FindPerson() {
       
       const zipFile = new File([zipBlob], `${folderName}.zip`, { type: 'application/zip' })
 
-      toast.info(`Uploading ${(finalZipSize / (1024 * 1024)).toFixed(1)}MB ZIP to Google Drive...`)
+      toast.info(`Uploading ${(finalZipSize / (1024 * 1024)).toFixed(1)}MB ZIP to Supabase storage...`)
 
-      // Upload to Google Drive using existing API route
+      // Upload to Supabase storage using existing API route
       const uploadFormData = new FormData()
       uploadFormData.append('file', zipFile)
       uploadFormData.append('email', referenceEmail)
       
-      const uploadResponse = await fetch('/api/upload-to-drive', {
+      const uploadResponse = await fetch('/api/upload-to-storage', {
         method: 'POST',
         body: uploadFormData,
       })
@@ -659,7 +659,12 @@ export default function FindPerson() {
         try {
           const { error: updateError } = await supabase
             .from('ref_images')
-            .update({ completed: "TRUE", drivelink: fileUrl, foldername: folderName, user: JSON.parse(localStorage.getItem('findPersonCredentials') || '{}').email })
+            .update({ 
+              completed: "TRUE", 
+              supabaselink: fileUrl, 
+              foldername: folderName, 
+              user: JSON.parse(localStorage.getItem('findPersonCredentials') || '{}').email 
+            })
             .eq('email', referenceEmail)
 
           if (updateError) {
@@ -674,13 +679,13 @@ export default function FindPerson() {
         }
       }
 
-      // Open Gmail compose window with drive link
+      // Open Gmail compose window with Supabase storage link
       const subject = encodeURIComponent('Special moment with the relic')
       const body = encodeURIComponent(`Dear Esteemed Visitor,
 
 We sincerely thank you and deeply appreciate your patience and understanding.
 
-Please find your special moment with the relic. This link will be accessible through Google Drive and will expire in 7 days.
+Please find your special moment with the relic. This secure link will be accessible and will expire in 7 days.
 
 Visitor Details:
 - Date: ${referenceDate ? new Date(referenceDate).toLocaleDateString() : 'Not available'}
@@ -706,7 +711,7 @@ The Photo Desk Team
         `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`
       )
 
-      toast.success(`ZIP file uploaded to Google Drive and email window opened for ${totalSelectedImages} total images`)
+      toast.success(`ZIP file uploaded to Supabase storage and email window opened for ${totalSelectedImages} total images`)
       
     } catch (error) {
       console.error('Error sending email:', error)

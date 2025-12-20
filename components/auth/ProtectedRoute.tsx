@@ -3,6 +3,7 @@
 import { useEffect, ReactNode } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import LoginModal from './LoginModal'
+import SubscriptionExpired from './SubscriptionExpired'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -17,13 +18,28 @@ export default function ProtectedRoute({
   subtitle,
   fallback 
 }: ProtectedRouteProps) {
-  const { isAuthenticated, setShowLoginModal } = useAuth()
+  const { isAuthenticated, setShowLoginModal, isPaid, isCheckingSubscription } = useAuth()
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated && isPaid !== false && !isCheckingSubscription) {
       setShowLoginModal(true)
     }
-  }, [isAuthenticated, setShowLoginModal])
+  }, [isAuthenticated, isPaid, isCheckingSubscription, setShowLoginModal])
+
+  if (isCheckingSubscription) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Checking subscription...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isPaid === false) {
+    return <SubscriptionExpired />
+  }
 
   if (!isAuthenticated) {
     return (
@@ -45,4 +61,5 @@ export default function ProtectedRoute({
   }
 
   return <>{children}</>
-} 
+}
+

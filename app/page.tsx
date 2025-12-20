@@ -53,10 +53,6 @@ export default function Home() {
 
       if (error) throw error
 
-      // console.log(`Total records in database: ${count}`)
-      // if (count !== null) {
-      //   toast.info(`Total records in database: ${count}`)
-      // }
     } catch (error) {
       console.error('Error getting total count:', error)
       toast.error('Error getting total record count')
@@ -199,7 +195,7 @@ export default function Home() {
         }
       }
 
-      console.log(`Fetched ${allPeriodData.length} records for period analysis`)
+
 
       if (allPeriodData.length > 0) {
         // Count occurrences of each date for total records
@@ -224,11 +220,9 @@ export default function Home() {
           dateEntry.completed = completedDateCounts[dateEntry.date] || 0
         })
 
-        console.log('Sample data with completed counts:', periodDates.slice(0, 5))
+
       }
 
-      console.log('Daily statistics:', sortedDays)
-      console.log('Period statistics:', periodDates)
 
       setAnalytics({
         totalRecords: totalCount || 0,
@@ -239,8 +233,7 @@ export default function Home() {
       });
 
       // Show total count in console
-      console.log(`Total records in database: ${totalCount}`)
-      console.log(`Completed: ${completedCount}, Pending: ${pendingCount}`)
+
 
     } catch (error) {
       console.error('Error fetching analytics:', error);

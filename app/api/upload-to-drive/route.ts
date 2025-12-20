@@ -8,17 +8,9 @@ const supabase = createClient(
 );
 
 export async function POST(request: any) {
-  console.log("Upload request received")
   try {
     const formData = await request.formData();
-    console.log('Received form data keys:', Array.from(formData.keys()));
     const file = formData.get('file') as File;
-    console.log('File info:', {
-      name: file?.name,
-      type: file?.type,
-      size: file?.size,
-      sizeMB: file?.size ? (file.size / (1024 * 1024)).toFixed(2) : 'unknown'
-    });
     const email = formData.get('email') as string;
 
     if (!file) {
@@ -41,7 +33,6 @@ export async function POST(request: any) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `${email.split('@')[0]}_${timestamp}.zip`;
 
-    console.log(`Uploading file: ${fileName} (${(file.size / (1024 * 1024)).toFixed(2)}MB)`);
 
     // Upload file to Supabase storage 'zips' bucket
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -56,14 +47,12 @@ export async function POST(request: any) {
       throw new Error(`Failed to upload file: ${uploadError.message}`);
     }
 
-    console.log(`File uploaded successfully: ${fileName}`);
 
     // Get the public URL for the uploaded file
     const { data: { publicUrl } } = supabase.storage
       .from('zips')
       .getPublicUrl(fileName);
 
-    console.log(`Public URL generated: ${publicUrl}`);
 
     return NextResponse.json({ 
       fileUrl: publicUrl,

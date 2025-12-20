@@ -79,12 +79,10 @@ export default function FindPerson() {
     const loadModels = async () => {
       try {
         setFaceApiLoaded(false)
-        console.log('🚀 Starting face-api.js model loading...')
         
         await faceApiModelLoader.loadModelsWithCache()
         
         setFaceApiLoaded(true)
-        console.log('✅ All face recognition models loaded successfully')
         toast.success('Face recognition models loaded from cache', {
           toastId: 'models-loaded'
         })
@@ -93,11 +91,9 @@ export default function FindPerson() {
         const cacheInfo = await faceApiModelLoader.getCacheInfo()
         if (cacheInfo.length > 0) {
           const totalSize = cacheInfo.reduce((sum, info) => sum + info.size, 0)
-          console.log(`📊 Cache info: ${cacheInfo.length} models, ${(totalSize / 1024 / 1024).toFixed(2)}MB total`)
         }
         
       } catch (error) {
-        console.error('❌ Error loading face-api models:', error)
         toast.error('Failed to load face recognition models. Please refresh the page.', {
           toastId: 'models-error'
         })
@@ -112,17 +108,13 @@ export default function FindPerson() {
   useEffect(() => {
     const loadReferenceImages = async () => {
       try {
-        console.log('Checking for reference data...')
         const referenceData = localStorage.getItem('facialRecognitionReference')
-        console.log('Raw reference data:', referenceData)
         
         if (referenceData) {
           const data = JSON.parse(referenceData)
-          console.log('Parsed reference data:', data)
           
           // Check if data is not too old (within 1 hour)
           const isRecent = Date.now() - data.timestamp < 3600000
-          console.log('Is data recent?', isRecent)
           
           if (isRecent && data.images && data.images.length > 0) {
             try {
@@ -140,12 +132,7 @@ export default function FindPerson() {
                 imageUrls.push(imageUrl)
               }
               
-              console.log('Setting reference data:', {
-                date: data.date,
-                time: data.time,
-                email: data.email,
-                imageCount: imageFiles.length
-              })
+       
               
               setReferenceImages(imageFiles)
               setReferenceImageUrls(imageUrls)
@@ -162,13 +149,10 @@ export default function FindPerson() {
               toast.error('Failed to load reference images')
             }
           } else {
-            console.log('Data is too old or no images found:', {
-              isRecent,
-              hasImages: data.images?.length > 0
-            })
+
           }
         } else {
-          console.log('No reference data found in localStorage')
+
         }
       } catch (error) {
         console.error('Error parsing reference data:', error)
@@ -611,7 +595,6 @@ export default function FindPerson() {
       })
       
       const finalZipSize = zipBlob.size
-      console.log(`Final ZIP size: ${(finalZipSize / (1024 * 1024)).toFixed(2)}MB`)
       
       // Check final ZIP size
       if (finalZipSize > 80 * 1024 * 1024) { // 80MB limit

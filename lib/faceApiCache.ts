@@ -186,13 +186,11 @@ export class FaceApiModelLoader {
       const cachedModel = await this.cache.getCachedModel(modelName)
       
       if (cachedModel) {
-        console.log(`✅ Loading ${modelName} from cache`)
         // Load from cache - face-api.js handles cached models automatically
         await loadFunction()
         return
       }
 
-      console.log(`📥 Downloading ${modelName} model...`)
       
       // Download and cache the model
       await loadFunction()
@@ -200,7 +198,6 @@ export class FaceApiModelLoader {
       // Cache the model files for future use
       await this.cacheModelFiles(modelName)
       
-      console.log(`✅ ${modelName} model downloaded and cached`)
       
     } catch (error) {
       console.error(`❌ Error loading ${modelName} model:`, error)

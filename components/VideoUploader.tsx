@@ -180,7 +180,6 @@ export default function VideoUploader() {
     if (e.target.files && e.target.files[0]) {
       try {
         const file = e.target.files[0];
-        console.log("Video selected:", file.name, file.size, file.type);
         
         setSnapshots([]);
         const objectUrl = URL.createObjectURL(file);
@@ -370,7 +369,6 @@ export default function VideoUploader() {
         videoElement.onloadedmetadata = () => resolve(null)
       })
       
-      console.log(`Video loaded: ${videoElement.duration}s`)
       
       const canvas = canvasRef.current
       canvas.width = videoElement.videoWidth
@@ -415,7 +413,6 @@ export default function VideoUploader() {
       }
       
       setAllFrames(tempFrames)
-      console.log(`Captured ${tempFrames.length} frames`)
       
       // Step 2: Filter frames by comparing with reference face
       setProcessingStage('filtering')

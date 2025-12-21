@@ -1,6 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'react-toastify'
 import SubscriptionExpired from '@/components/auth/SubscriptionExpired'
@@ -38,6 +39,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isPaid, setIsPaid] = useState<boolean | null>(null)
   const [isCheckingSubscription, setIsCheckingSubscription] = useState(true)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const pathname = usePathname()
+  const isSubscriptionRoute = pathname?.startsWith('/subscription')
 
   const checkIsPaidStatus = async (): Promise<boolean> => {
     try {
@@ -68,11 +71,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     const bootstrapAuth = async () => {
+      if (isSubscriptionRoute) {
+        // Bypass subscription gating for the subscription route
+        setIsPaid(true)
+        setIsCheckingSubscription(false)
+        return
+      }
       await checkAuthStatus()
     }
 
     bootstrapAuth()
-  }, [])
+  }, [isSubscriptionRoute])
 
   const checkAuthStatus = async () => {
     try {
@@ -186,7 +195,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     checkIsPaidStatus
   }
 
-  const shouldShowExpired = !isCheckingSubscription && isPaid === false
+  const shouldShowExpired = !isSubscriptionRoute && !isCheckingSubscription && isPaid === false
 
   return (
     <AuthContext.Provider value={value}>
